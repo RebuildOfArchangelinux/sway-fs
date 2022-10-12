@@ -9,5 +9,5 @@ build-*/
 .lvimrc
 config-debug
 wayland-*-protocol.*
-/subprojects/wlroots
-subprojects
+.ccls-cache
+compile_commands.json

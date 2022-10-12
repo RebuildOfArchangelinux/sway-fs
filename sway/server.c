@@ -35,6 +35,7 @@
 #include <wlr/types/wlr_xdg_foreign_v1.h>
 #include <wlr/types/wlr_xdg_foreign_v2.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 #include "config.h"
 #include "list.h"
 #include "log.h"
@@ -123,6 +124,8 @@ bool server_init(struct sway_server *server) {
 	wl_signal_add(&server->layer_shell->events.new_surface,
 		&server->layer_shell_surface);
 	server->layer_shell_surface.notify = handle_layer_shell_surface;
+
+	wlr_fractional_scale_global_create(server->wl_display);
 
 	server->xdg_shell = wlr_xdg_shell_create(server->wl_display,
 		SWAY_XDG_SHELL_VERSION);
@@ -239,7 +242,7 @@ bool server_init(struct sway_server *server) {
 	}
 
 	struct wlr_output *wlr_output =
-			wlr_headless_add_output(server->headless_backend, 800, 600);
+			wlr_headless_add_output(server->headless_backend, 1280, 720);
 	wlr_output_set_name(wlr_output, "FALLBACK");
 	root->fallback_output = output_create(wlr_output);
 

@@ -915,7 +915,7 @@ void view_center_surface(struct sway_view *view) {
 static const struct sway_view_child_impl subsurface_impl;
 
 static void subsurface_get_view_coords(struct sway_view_child *child,
-		int *sx, int *sy) {
+		double *sx, double *sy) {
 	struct wlr_surface *surface = child->surface;
 	if (child->parent && child->parent->impl &&
 			child->parent->impl->get_view_coords) {
@@ -1008,7 +1008,7 @@ static void view_child_damage(struct sway_view_child *child, bool whole) {
 	if (!child || !view_child_is_mapped(child) || !child->view || !child->view->container) {
 		return;
 	}
-	int sx, sy;
+	double sx, sy;
 	child->impl->get_view_coords(child, &sx, &sy);
 	desktop_damage_surface(child->surface,
 			child->view->container->pending.content_x -
@@ -1398,7 +1398,7 @@ void view_remove_saved_buffer(struct sway_view *view) {
 }
 
 static void view_save_buffer_iterator(struct wlr_surface *surface,
-		int sx, int sy, void *data) {
+		double sx, double sy, void *data) {
 	struct sway_view *view = data;
 
 	if (surface && wlr_surface_has_buffer(surface)) {

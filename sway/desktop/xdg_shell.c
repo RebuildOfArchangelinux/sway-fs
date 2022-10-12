@@ -22,7 +22,7 @@
 static const struct sway_view_child_impl popup_impl;
 
 static void popup_get_view_coords(struct sway_view_child *child,
-		int *sx, int *sy) {
+		double *sx, double *sy) {
 	struct sway_xdg_popup *popup = (struct sway_xdg_popup *)child;
 	struct wlr_xdg_popup *wlr_popup = popup->wlr_xdg_popup;
 
@@ -71,7 +71,7 @@ static void popup_unconstrain(struct sway_xdg_popup *popup) {
 
 	// the output box expressed in the coordinate system of the toplevel parent
 	// of the popup
-	struct wlr_box output_toplevel_sx_box = {
+	struct wlr_fbox output_toplevel_sx_box = {
 		.x = output->lx - view->container->pending.content_x + view->geometry.x,
 		.y = output->ly - view->container->pending.content_y + view->geometry.y,
 		.width = output->width,
@@ -273,7 +273,7 @@ static void handle_commit(struct wl_listener *listener, void *data) {
 	struct sway_view *view = &xdg_shell_view->view;
 	struct wlr_xdg_surface *xdg_surface = view->wlr_xdg_toplevel->base;
 
-	struct wlr_box new_geo;
+	struct wlr_fbox new_geo;
 	wlr_xdg_surface_get_geometry(xdg_surface, &new_geo);
 	bool new_size = new_geo.width != view->geometry.width ||
 			new_geo.height != view->geometry.height ||
@@ -285,7 +285,7 @@ static void handle_commit(struct wl_listener *listener, void *data) {
 		// containers, we resize the container to match. For tiling containers,
 		// we only recenter the surface.
 		desktop_damage_view(view);
-		memcpy(&view->geometry, &new_geo, sizeof(struct wlr_box));
+		memcpy(&view->geometry, &new_geo, sizeof(struct wlr_fbox));
 		if (container_is_floating(view->container)) {
 			view_update_size(view);
 			transaction_commit_dirty_client();

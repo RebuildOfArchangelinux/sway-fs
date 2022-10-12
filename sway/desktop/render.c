@@ -98,7 +98,7 @@ static void set_scale_filter(struct wlr_output *wlr_output,
 
 static void render_texture(struct wlr_output *wlr_output,
 		pixman_region32_t *output_damage, struct wlr_texture *texture,
-		const struct wlr_fbox *src_box, const struct wlr_box *dst_box,
+		const struct wlr_fbox *src_box, const struct wlr_fbox *dst_box,
 		const float matrix[static 9], float alpha) {
 	struct wlr_renderer *renderer = wlr_output->renderer;
 	struct sway_output *output = wlr_output->data;
@@ -131,7 +131,7 @@ damage_finish:
 
 static void render_surface_iterator(struct sway_output *output,
 		struct sway_view *view, struct wlr_surface *surface,
-		struct wlr_box *_box, void *_data) {
+		struct wlr_fbox *_box, void *_data) {
 	struct render_data *data = _data;
 	struct wlr_output *wlr_output = output->wlr_output;
 	pixman_region32_t *output_damage = data->damage;
@@ -145,22 +145,22 @@ static void render_surface_iterator(struct sway_output *output,
 	struct wlr_fbox src_box;
 	wlr_surface_get_buffer_source_box(surface, &src_box);
 
-	struct wlr_box proj_box = *_box;
-	scale_box(&proj_box, wlr_output->scale);
+	struct wlr_fbox proj_box = *_box;
+	scale_fbox(&proj_box, wlr_output->scale);
 
 	float matrix[9];
 	enum wl_output_transform transform =
 		wlr_output_transform_invert(surface->current.transform);
-	wlr_matrix_project_box(matrix, &proj_box, transform, 0.0,
+	wlr_matrix_project_fbox(matrix, &proj_box, transform, 0.0,
 		wlr_output->transform_matrix);
 
-	struct wlr_box dst_box = *_box;
+	struct wlr_fbox dst_box = *_box;
 	struct wlr_box *clip_box = data->clip_box;
 	if (clip_box != NULL) {
 		dst_box.width = fmin(dst_box.width, clip_box->width);
 		dst_box.height = fmin(dst_box.height, clip_box->height);
 	}
-	scale_box(&dst_box, wlr_output->scale);
+	scale_fbox(&dst_box, wlr_output->scale);
 
 	render_texture(wlr_output, output_damage, texture,
 		&src_box, &dst_box, matrix, alpha);
@@ -302,30 +302,31 @@ static void render_saved_view(struct sway_view *view,
 			continue;
 		}
 
-		struct wlr_box proj_box = {
+		struct wlr_fbox proj_box = {
 			.x = saved_buf->x - view->saved_geometry.x - output->lx,
 			.y = saved_buf->y - view->saved_geometry.y - output->ly,
 			.width = saved_buf->width,
 			.height = saved_buf->height,
 		};
 
-		struct wlr_box output_box = {
+		struct wlr_fbox output_box = {
+			.x = 0, .y = 0,
 			.width = output->width,
 			.height = output->height,
 		};
 
-		struct wlr_box intersection;
-		bool intersects = wlr_box_intersection(&intersection, &output_box, &proj_box);
+		struct wlr_fbox intersection;
+		bool intersects = wlr_fbox_intersection(&intersection, &output_box, &proj_box);
 		if (!intersects) {
 			continue;
 		}
 
-		struct wlr_box dst_box = proj_box;
-		scale_box(&proj_box, wlr_output->scale);
+		struct wlr_fbox dst_box = proj_box;
+		scale_fbox(&proj_box, wlr_output->scale);
 
 		float matrix[9];
 		enum wl_output_transform transform = wlr_output_transform_invert(saved_buf->transform);
-		wlr_matrix_project_box(matrix, &proj_box, transform, 0,
+		wlr_matrix_project_fbox(matrix, &proj_box, transform, 0,
 			wlr_output->transform_matrix);
 
 		if (!floating) {
@@ -336,7 +337,7 @@ static void render_saved_view(struct sway_view *view,
 					view->container->current.content_height -
 					(saved_buf->y - view->container->current.content_y) + view->saved_geometry.y);
 		}
-		scale_box(&dst_box, wlr_output->scale);
+		scale_fbox(&dst_box, wlr_output->scale);
 
 		render_texture(wlr_output, damage, saved_buf->buffer->texture,
 			&saved_buf->source_box, &dst_box, matrix, alpha);
@@ -487,7 +488,8 @@ static void render_titlebar(struct sway_output *output,
 	int ob_marks_x = 0; // output-buffer-local
 	int ob_marks_width = 0; // output-buffer-local
 	if (config->show_marks && marks_texture) {
-		struct wlr_box texture_box = {
+		struct wlr_fbox texture_box = {
+			.x = 0., .y = 0.,
 			.width = marks_texture->width,
 			.height = marks_texture->height,
 		};
@@ -512,7 +514,7 @@ static void render_titlebar(struct sway_output *output,
 			ob_padding_above;
 
 		float matrix[9];
-		wlr_matrix_project_box(matrix, &texture_box,
+		wlr_matrix_project_fbox(matrix, &texture_box,
 			WL_OUTPUT_TRANSFORM_NORMAL,
 			0.0, output->wlr_output->transform_matrix);
 
@@ -541,7 +543,8 @@ static void render_titlebar(struct sway_output *output,
 	int ob_title_x = 0;  // output-buffer-local
 	int ob_title_width = 0; // output-buffer-local
 	if (title_texture) {
-		struct wlr_box texture_box = {
+		struct wlr_fbox texture_box = {
+			.x = 0., .y = 0.,
 			.width = title_texture->width,
 			.height = title_texture->height,
 		};
@@ -587,7 +590,7 @@ static void render_titlebar(struct sway_output *output,
 			round((bg_y - output_y) * output_scale) + ob_padding_above;
 
 		float matrix[9];
-		wlr_matrix_project_box(matrix, &texture_box,
+		wlr_matrix_project_fbox(matrix, &texture_box,
 			WL_OUTPUT_TRANSFORM_NORMAL,
 			0.0, output->wlr_output->transform_matrix);
 

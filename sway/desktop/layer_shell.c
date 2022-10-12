@@ -289,7 +289,7 @@ static void handle_surface_commit(struct wl_listener *listener, void *data) {
 	struct wlr_output *wlr_output = layer_surface->output;
 	sway_assert(wlr_output, "wlr_layer_surface_v1 has null output");
 	struct sway_output *output = wlr_output->data;
-	struct wlr_box old_extent = layer->extent;
+	struct wlr_fbox old_extent = layer->extent;
 
 	bool layer_changed = false;
 	if (layer_surface->current.committed != 0
@@ -310,9 +310,12 @@ static void handle_surface_commit(struct wl_listener *listener, void *data) {
 	layer->extent.y += layer->geo.y;
 
 	bool extent_changed =
-		memcmp(&old_extent, &layer->extent, sizeof(struct wlr_box)) != 0;
+		memcmp(&old_extent, &layer->extent, sizeof(struct wlr_fbox)) != 0;
 	if (extent_changed || layer_changed) {
-		output_damage_box(output, &old_extent);
+		struct wlr_box old_extent_box = {
+			.x = old_extent.x, .y = old_extent.y, .width = old_extent.width, .height = old_extent.height
+		};
+		output_damage_box(output, &old_extent_box);
 		output_damage_surface(output, layer->geo.x, layer->geo.y,
 			layer_surface->surface, true);
 	} else {
@@ -546,7 +549,7 @@ static void popup_unconstrain(struct sway_layer_popup *popup) {
 
 	// the output box expressed in the coordinate system of the toplevel parent
 	// of the popup
-	struct wlr_box output_toplevel_sx_box = {
+	struct wlr_fbox output_toplevel_sx_box = {
 		.x = -layer->geo.x,
 		.y = -layer->geo.y,
 		.width = output->width,
@@ -608,7 +611,7 @@ struct sway_layer_surface *layer_from_wlr_layer_surface_v1(
 void handle_layer_shell_surface(struct wl_listener *listener, void *data) {
 	struct wlr_layer_surface_v1 *layer_surface = data;
 	sway_log(SWAY_DEBUG, "new layer surface: namespace %s layer %d anchor %" PRIu32
-			" size %" PRIu32 "x%" PRIu32 " margin %" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",",
+			" size %lfx%lf margin %lf,%lf,%lf,%lf,",
 		layer_surface->namespace,
 		layer_surface->pending.layer,
 		layer_surface->pending.anchor,

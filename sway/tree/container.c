@@ -1322,13 +1322,13 @@ bool container_is_fullscreen_or_child(struct sway_container *container) {
 }
 
 static void surface_send_enter_iterator(struct wlr_surface *surface,
-		int x, int y, void *data) {
+		double x, double y, void *data) {
 	struct wlr_output *wlr_output = data;
 	wlr_surface_send_enter(surface, wlr_output);
 }
 
 static void surface_send_leave_iterator(struct wlr_surface *surface,
-		int x, int y, void *data) {
+		double x, double y, void *data) {
 	struct wlr_output *wlr_output = data;
 	wlr_surface_send_leave(surface, wlr_output);
 }
