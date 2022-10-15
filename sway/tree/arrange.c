@@ -13,7 +13,7 @@
 #include "list.h"
 #include "log.h"
 
-static void apply_horiz_layout(list_t *children, struct wlr_box *parent) {
+static void apply_horiz_layout(list_t *children, struct wlr_fbox *parent) {
 	if (!children->length) {
 		return;
 	}
@@ -81,7 +81,7 @@ static void apply_horiz_layout(list_t *children, struct wlr_box *parent) {
 		child->child_total_width = child_total_width;
 		child->pending.x = child_x;
 		child->pending.y = parent->y;
-		child->pending.width = round(child->width_fraction * child_total_width);
+		child->pending.width = child->width_fraction * child_total_width;
 		child->pending.height = parent->height;
 		child_x += child->pending.width + inner_gap;
 
@@ -92,7 +92,7 @@ static void apply_horiz_layout(list_t *children, struct wlr_box *parent) {
 	}
 }
 
-static void apply_vert_layout(list_t *children, struct wlr_box *parent) {
+static void apply_vert_layout(list_t *children, struct wlr_fbox *parent) {
 	if (!children->length) {
 		return;
 	}
@@ -161,7 +161,7 @@ static void apply_vert_layout(list_t *children, struct wlr_box *parent) {
 		child->pending.x = parent->x;
 		child->pending.y = child_y;
 		child->pending.width = parent->width;
-		child->pending.height = round(child->height_fraction * child_total_height);
+		child->pending.height = child->height_fraction * child_total_height;
 		child_y += child->pending.height + inner_gap;
 
 		// Make last child use remaining height of parent
@@ -171,7 +171,7 @@ static void apply_vert_layout(list_t *children, struct wlr_box *parent) {
 	}
 }
 
-static void apply_tabbed_layout(list_t *children, struct wlr_box *parent) {
+static void apply_tabbed_layout(list_t *children, struct wlr_fbox *parent) {
 	if (!children->length) {
 		return;
 	}
@@ -185,7 +185,7 @@ static void apply_tabbed_layout(list_t *children, struct wlr_box *parent) {
 	}
 }
 
-static void apply_stacked_layout(list_t *children, struct wlr_box *parent) {
+static void apply_stacked_layout(list_t *children, struct wlr_fbox *parent) {
 	if (!children->length) {
 		return;
 	}
@@ -208,7 +208,7 @@ static void arrange_floating(list_t *floating) {
 }
 
 static void arrange_children(list_t *children,
-		enum sway_container_layout layout, struct wlr_box *parent) {
+		enum sway_container_layout layout, struct wlr_fbox *parent) {
 	// Calculate x, y, width and height of children
 	switch (layout) {
 	case L_HORIZ:
@@ -244,7 +244,7 @@ void arrange_container(struct sway_container *container) {
 		node_set_dirty(&container->node);
 		return;
 	}
-	struct wlr_box box;
+	struct wlr_fbox box;
 	container_get_box(container, &box);
 	arrange_children(container->pending.children, container->pending.layout, &box);
 	node_set_dirty(&container->node);
@@ -280,9 +280,9 @@ void arrange_workspace(struct sway_workspace *workspace) {
 			container_floating_translate(floater, diff_x, diff_y);
 			double center_x = floater->pending.x + floater->pending.width / 2;
 			double center_y = floater->pending.y + floater->pending.height / 2;
-			struct wlr_box workspace_box;
-			workspace_get_box(workspace, &workspace_box);
-			if (!wlr_box_contains_point(&workspace_box, center_x, center_y)) {
+			struct wlr_fbox workspace_box;
+			workspace_get_fbox(workspace, &workspace_box);
+			if (!wlr_fbox_contains_point(&workspace_box, center_x, center_y)) {
 				container_floating_move_to_center(floater);
 			}
 		}
@@ -300,8 +300,8 @@ void arrange_workspace(struct sway_workspace *workspace) {
 		fs->pending.height = output->height;
 		arrange_container(fs);
 	} else {
-		struct wlr_box box;
-		workspace_get_box(workspace, &box);
+		struct wlr_fbox box;
+		workspace_get_fbox(workspace, &box);
 		arrange_children(workspace->tiling, workspace->layout, &box);
 		arrange_floating(workspace->floating);
 	}

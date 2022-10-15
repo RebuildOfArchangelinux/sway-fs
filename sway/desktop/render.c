@@ -147,6 +147,7 @@ static void render_surface_iterator(struct sway_output *output,
 
 	struct wlr_fbox proj_box = *_box;
 	scale_fbox(&proj_box, wlr_output->scale);
+	proj_box.x = round(proj_box.x), proj_box.y = round(proj_box.y);
 
 	float matrix[9];
 	enum wl_output_transform transform =
@@ -161,13 +162,16 @@ static void render_surface_iterator(struct sway_output *output,
 		dst_box.height = fmin(dst_box.height, clip_box->height);
 	}
 	scale_fbox(&dst_box, wlr_output->scale);
+	dst_box.x = round(dst_box.x), dst_box.y = round(dst_box.y);
 
-	// printf("box %lf %lf %lf %lf\n", _box->x, _box->y, _box->width, _box->height);
-	// printf("src box %lf %lf %lf %lf\n", src_box.x, src_box.y, src_box.width, src_box.height);
-	// printf("dst box %lf %lf %lf %lf\n", dst_box.x, dst_box.y, dst_box.width, dst_box.height);
-	// printf("clip box %d %d %d %d\n", clip_box->x, clip_box->y, clip_box->width, clip_box->height);
-	// printf("damage %d %d %d %d\n", output_damage->extents.x1, output_damage->extents.y1,
-		// output_damage->extents.x2, output_damage->extents.y2);
+	printf("box %lf %lf %lf %lf\n", _box->x, _box->y, _box->width, _box->height);
+	printf("src box %lf %lf %lf %lf\n", src_box.x, src_box.y, src_box.width, src_box.height);
+	printf("dst box %lf %lf %lf %lf\n", dst_box.x, dst_box.y, dst_box.width, dst_box.height);
+	printf("proj box %lf %lf %lf %lf\n", proj_box.x, proj_box.y, proj_box.width, proj_box.height);
+	printf("clip box %d %d %d %d\n", clip_box->x, clip_box->y, clip_box->width, clip_box->height);
+	printf("damage %d %d %d %d\n", output_damage->extents.x1, output_damage->extents.y1,
+		output_damage->extents.x2, output_damage->extents.y2);
+	printf("texture %d,%d\n", texture->width, texture->height);
 	render_texture(wlr_output, output_damage, texture,
 		&src_box, &dst_box, matrix, alpha);
 

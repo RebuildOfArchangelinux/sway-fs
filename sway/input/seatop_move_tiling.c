@@ -132,7 +132,7 @@ static bool split_titlebar(struct sway_node *node, struct sway_container *avoid,
 	struct sway_container *con = node->sway_container;
 	struct sway_node *parent = &con->pending.parent->node;
 	int title_height = container_titlebar_height();
-	struct wlr_box box;
+	struct wlr_fbox box;
 	int n_children, avoid_index;
 	enum sway_container_layout layout =
 		parent ? node_get_layout(parent) : L_NONE;
@@ -229,7 +229,7 @@ static void handle_motion_postthreshold(struct sway_seat *seat) {
 	while (con) {
 		enum wlr_edges edge = WLR_EDGE_NONE;
 		enum sway_container_layout layout = container_parent_layout(con);
-		struct wlr_box box;
+		struct wlr_fbox box;
 		node_get_box(node_get_parent(&con->node), &box);
 		if (layout == L_HORIZ || layout == L_TABBED) {
 			if (cursor->cursor->y < thresh_top) {
@@ -256,7 +256,9 @@ static void handle_motion_postthreshold(struct sway_seat *seat) {
 				e->target_node = node_get_parent(e->target_node);
 			}
 			e->target_edge = edge;
-			e->drop_box = box;
+			struct wlr_box t;
+			wlr_fbox_to_box_trunc(&t, &box);
+			e->drop_box = t;
 			desktop_damage_box(&e->drop_box);
 			return;
 		}

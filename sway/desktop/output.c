@@ -79,7 +79,7 @@ static bool get_surface_box(struct surface_iterator_data *data,
 
 	double sw = surface->current.width;
 	double sh = surface->current.height;
-	// printf("Get surface box %lf %lf %lf %lf\n", data->ox, data->oy, sx, sy);
+	printf("Get surface box %lf %lf %lf %lf\n", data->ox, data->oy, sx, sy);
 
 	struct wlr_fbox box = {
 		.x = data->ox + sx,
@@ -150,8 +150,8 @@ void output_view_for_each_surface(struct sway_output *output,
 		.height = view->container->current.content_height,
 	};
 
-	// printf("View for each surface %lf,%lf,%lf %lf,%lf,%lf\n", view->container->surface_x,(double) output->lx, view->geometry.x, view->container->surface_y, (double) output->ly,
-			// view->geometry.y);
+	printf("View for each surface %lf,%lf,%lf %lf,%lf,%lf\n", view->container->surface_x,(double) output->lx, view->geometry.x,
+		view->container->surface_y, (double) output->ly, view->geometry.y);
 	view_for_each_surface(view, output_for_each_surface_iterator, &data);
 }
 
@@ -682,6 +682,12 @@ static void damage_surface_iterator(struct sway_output *output,
 		wlr_region_expand(&damage, &damage,
 			ceil(output->wlr_output->scale) - surface->current.scale);
 	}
+	int nrects = 0;
+	pixman_box32_t *boxes = pixman_region32_rectangles(&damage, &nrects);
+	for (int i = 0; i < nrects; i++) {
+		printf("Damage rect %d %d %d %d\n", boxes->x1, boxes->y1, boxes->x2, boxes->y2);
+	}
+	printf("Damage %lf,%lf %lf,%lf\n", box.x, box.y, box.width, box.height);
 	pixman_region32_translate(&damage, box.x, box.y);
 	wlr_output_damage_add(output->damage, &damage);
 	pixman_region32_fini(&damage);

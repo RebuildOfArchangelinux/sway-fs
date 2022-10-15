@@ -213,7 +213,7 @@ static struct sway_container *surface_at_view(struct sway_container *con, double
 static struct sway_container *container_at_tabbed(struct sway_node *parent,
 		double lx, double ly,
 		struct wlr_surface **surface, double *sx, double *sy) {
-	struct wlr_box box;
+	struct wlr_fbox box;
 	node_get_box(parent, &box);
 	if (lx < box.x || lx > box.x + box.width ||
 			ly < box.y || ly > box.y + box.height) {
@@ -248,7 +248,7 @@ static struct sway_container *container_at_tabbed(struct sway_node *parent,
 static struct sway_container *container_at_stacked(struct sway_node *parent,
 		double lx, double ly,
 		struct wlr_surface **surface, double *sx, double *sy) {
-	struct wlr_box box;
+	struct wlr_fbox box;
 	node_get_box(parent, &box);
 	if (lx < box.x || lx > box.x + box.width ||
 			ly < box.y || ly > box.y + box.height) {
@@ -948,7 +948,7 @@ bool container_is_current_floating(struct sway_container *container) {
 	return false;
 }
 
-void container_get_box(struct sway_container *container, struct wlr_box *box) {
+void container_get_box(struct sway_container *container, struct wlr_fbox *box) {
 	box->x = container->pending.x;
 	box->y = container->pending.y;
 	box->width = container->pending.width;
