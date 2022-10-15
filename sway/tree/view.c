@@ -910,6 +910,10 @@ void view_center_surface(struct sway_view *view) {
 			(con->current.content_width - view->geometry.width) / 2);
 	con->surface_y = fmax(con->current.content_y, con->current.content_y +
 			(con->current.content_height - view->geometry.height) / 2);
+	// printf("Center surface %lf,%lf,%lf %lf,%lf,%lf\n",
+	// 		con->current.content_x, con->current.content_width,
+	// 		view->geometry.width, con->current.content_y,
+	// 		con->current.content_height, view->geometry.height);
 }
 
 static const struct sway_view_child_impl subsurface_impl;

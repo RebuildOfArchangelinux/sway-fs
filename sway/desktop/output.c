@@ -79,6 +79,7 @@ static bool get_surface_box(struct surface_iterator_data *data,
 
 	double sw = surface->current.width;
 	double sh = surface->current.height;
+	// printf("Get surface box %lf %lf %lf %lf\n", data->ox, data->oy, sx, sy);
 
 	struct wlr_fbox box = {
 		.x = data->ox + sx,
@@ -128,6 +129,7 @@ void output_surface_for_each_surface(struct sway_output *output,
 		.height = surface->current.height,
 	};
 
+	// printf("Output for each surface %lf %lf\n", ox, oy);
 	wlr_surface_for_each_surface(surface,
 		output_for_each_surface_iterator, &data);
 }
@@ -148,6 +150,8 @@ void output_view_for_each_surface(struct sway_output *output,
 		.height = view->container->current.content_height,
 	};
 
+	// printf("View for each surface %lf,%lf,%lf %lf,%lf,%lf\n", view->container->surface_x,(double) output->lx, view->geometry.x, view->container->surface_y, (double) output->ly,
+			// view->geometry.y);
 	view_for_each_surface(view, output_for_each_surface_iterator, &data);
 }
 
@@ -167,6 +171,7 @@ void output_view_for_each_popup_surface(struct sway_output *output,
 		.height = view->container->current.content_height,
 	};
 
+	// printf("View for each popup surface %lf %lf\n", data.ox, data.oy);
 	view_for_each_popup_surface(view, output_for_each_surface_iterator, &data);
 }
 
@@ -188,6 +193,7 @@ void output_layer_for_each_surface(struct sway_output *output,
 			.width = surface->current.width,
 			.height = surface->current.height,
 		};
+		// printf("Layer for each surface %d %d\n", layer_surface->geo.x, layer_surface->geo.y);
 		wlr_layer_surface_v1_for_each_surface(wlr_layer_surface_v1,
 			output_for_each_surface_iterator, &data);
 	}
@@ -225,6 +231,7 @@ void output_layer_for_each_popup_surface(struct sway_output *output,
 			.width = surface->current.width,
 			.height = surface->current.height,
 		};
+		// printf("Layer for each popup surface %d %d\n", layer_surface->geo.x, layer_surface->geo.y);
 		wlr_layer_surface_v1_for_each_popup_surface(wlr_layer_surface_v1,
 			output_for_each_surface_iterator, &data);
 	}

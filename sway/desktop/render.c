@@ -162,6 +162,12 @@ static void render_surface_iterator(struct sway_output *output,
 	}
 	scale_fbox(&dst_box, wlr_output->scale);
 
+	// printf("box %lf %lf %lf %lf\n", _box->x, _box->y, _box->width, _box->height);
+	// printf("src box %lf %lf %lf %lf\n", src_box.x, src_box.y, src_box.width, src_box.height);
+	// printf("dst box %lf %lf %lf %lf\n", dst_box.x, dst_box.y, dst_box.width, dst_box.height);
+	// printf("clip box %d %d %d %d\n", clip_box->x, clip_box->y, clip_box->width, clip_box->height);
+	// printf("damage %d %d %d %d\n", output_damage->extents.x1, output_damage->extents.y1,
+		// output_damage->extents.x2, output_damage->extents.y2);
 	render_texture(wlr_output, output_damage, texture,
 		&src_box, &dst_box, matrix, alpha);
 
