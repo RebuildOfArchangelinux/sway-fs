@@ -70,7 +70,7 @@ struct surface_iterator_data {
 
 static bool get_surface_box(struct surface_iterator_data *data,
 		struct wlr_surface *surface, int sx, int sy,
-		struct wlr_box *surface_box) {
+		struct wlr_fbox *surface_box) {
 	struct sway_output *output = data->output;
 
 	if (!wlr_surface_has_buffer(surface)) {
@@ -80,30 +80,30 @@ static bool get_surface_box(struct surface_iterator_data *data,
 	int sw = surface->current.width;
 	int sh = surface->current.height;
 
-	struct wlr_box box = {
-		.x = floor(data->ox + sx),
-		.y = floor(data->oy + sy),
+	struct wlr_fbox box = {
+		.x = data->ox + sx,
+		.y = data->oy + sy,
 		.width = sw,
 		.height = sh,
 	};
 	if (surface_box != NULL) {
-		memcpy(surface_box, &box, sizeof(struct wlr_box));
+		memcpy(surface_box, &box, sizeof(struct wlr_fbox));
 	}
 
-	struct wlr_box output_box = {
+	struct wlr_fbox output_box = {
 		.width = output->width,
 		.height = output->height,
 	};
 
-	struct wlr_box intersection;
-	return wlr_box_intersection(&intersection, &output_box, &box);
+	struct wlr_fbox intersection;
+	return wlr_fbox_intersection(&intersection, &output_box, &box);
 }
 
 static void output_for_each_surface_iterator(struct wlr_surface *surface,
 		int sx, int sy, void *_data) {
 	struct surface_iterator_data *data = _data;
 
-	struct wlr_box box;
+	struct wlr_fbox box;
 	bool intersects = get_surface_box(data, surface, sx, sy, &box);
 	if (!intersects) {
 		return;
@@ -371,6 +371,13 @@ void scale_box(struct wlr_box *box, float scale) {
 	box->y = round(box->y * scale);
 }
 
+void scale_fbox(struct wlr_fbox *box, double scale) {
+	box->width = box->width * scale;
+	box->height = box->height * scale;
+	box->x = round(box->x * scale);
+	box->y = round(box->y * scale);
+}
+
 struct sway_workspace *output_get_active_workspace(struct sway_output *output) {
 	struct sway_seat *seat = input_manager_current_seat();
 	struct sway_node *focus = seat_get_active_tiling_child(seat, &output->node);
@@ -415,7 +422,7 @@ struct send_frame_done_data {
 
 static void send_frame_done_iterator(struct sway_output *output,
 		struct sway_view *view, struct wlr_surface *surface,
-		struct wlr_box *box, void *user_data) {
+		struct wlr_fbox *box, void *user_data) {
 	int view_max_render_time = 0;
 	if (view != NULL) {
 		view_max_render_time = view->max_render_time;
@@ -440,7 +447,7 @@ static void send_frame_done(struct sway_output *output, struct send_frame_done_d
 
 static void count_surface_iterator(struct sway_output *output,
 		struct sway_view *view, struct wlr_surface *surface,
-		struct wlr_box *box, void *data) {
+		struct wlr_fbox *box, void *data) {
 	size_t *n = data;
 	(*n)++;
 }
@@ -650,12 +657,12 @@ void output_damage_whole(struct sway_output *output) {
 
 static void damage_surface_iterator(struct sway_output *output,
 		struct sway_view *view, struct wlr_surface *surface,
-		struct wlr_box *_box, void *_data) {
+		struct wlr_fbox *_box, void *_data) {
 	bool *data = _data;
 	bool whole = *data;
 
-	struct wlr_box box = *_box;
-	scale_box(&box, output->wlr_output->scale);
+	struct wlr_fbox box = *_box;
+	scale_fbox(&box, output->wlr_output->scale);
 
 	pixman_region32_t damage;
 	pixman_region32_init(&damage);
@@ -672,7 +679,9 @@ static void damage_surface_iterator(struct sway_output *output,
 	pixman_region32_fini(&damage);
 
 	if (whole) {
-		wlr_output_damage_add_box(output->damage, &box);
+		struct wlr_box t;
+		wlr_fbox_to_box_trunc(&t, &box);
+		wlr_output_damage_add_box(output->damage, &t);
 	}
 
 	if (!wl_list_empty(&surface->current.frame_callback_list)) {
@@ -696,13 +705,15 @@ void output_damage_from_view(struct sway_output *output,
 }
 
 // Expecting an unscaled box in layout coordinates
-void output_damage_box(struct sway_output *output, struct wlr_box *_box) {
-	struct wlr_box box;
-	memcpy(&box, _box, sizeof(struct wlr_box));
+void output_damage_box(struct sway_output *output, struct wlr_fbox *_box) {
+	struct wlr_fbox box;
+	memcpy(&box, _box, sizeof(struct wlr_fbox));
 	box.x -= output->lx;
 	box.y -= output->ly;
-	scale_box(&box, output->wlr_output->scale);
-	wlr_output_damage_add_box(output->damage, &box);
+	scale_fbox(&box, output->wlr_output->scale);
+	struct wlr_box t;
+	wlr_fbox_to_box_trunc(&t, &box);
+	wlr_output_damage_add_box(output->damage, &t);
 }
 
 static void damage_child_views_iterator(struct sway_container *con,

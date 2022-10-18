@@ -62,7 +62,7 @@ bool node_is_view(struct sway_node *node);
 
 char *node_get_name(struct sway_node *node);
 
-void node_get_box(struct sway_node *node, struct wlr_box *box);
+void node_get_box(struct sway_node *node, struct wlr_fbox *box);
 
 struct sway_output *node_get_output(struct sway_node *node);
 

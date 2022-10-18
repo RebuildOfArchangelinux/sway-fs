@@ -911,6 +911,10 @@ void view_center_surface(struct sway_view *view) {
 			(con->current.content_width - view->geometry.width) / 2);
 	con->surface_y = fmax(con->current.content_y, con->current.content_y +
 			(con->current.content_height - view->geometry.height) / 2);
+	printf("Center surface %lf,%lf,%lf %lf,%lf,%lf\n",
+			con->current.content_x, con->current.content_width,
+			view->geometry.width, con->current.content_y,
+			con->current.content_height, view->geometry.height);
 }
 
 static const struct sway_view_child_impl subsurface_impl;
@@ -1120,8 +1124,8 @@ void view_child_init(struct sway_view_child *child,
 	if (container != NULL) {
 		struct sway_workspace *workspace = container->pending.workspace;
 		if (workspace) {
-			wlr_surface_send_enter(child->surface, workspace->output->wlr_output);
 			wlr_fractional_scale_v1_notify_scale(child->surface, workspace->output->wlr_output->scale);
+			wlr_surface_send_enter(child->surface, workspace->output->wlr_output);
 		}
 	}
 

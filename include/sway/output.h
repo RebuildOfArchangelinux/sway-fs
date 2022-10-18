@@ -78,7 +78,7 @@ void output_add_workspace(struct sway_output *output,
 		struct sway_workspace *workspace);
 
 typedef void (*sway_surface_iterator_func_t)(struct sway_output *output,
-	struct sway_view *view, struct wlr_surface *surface, struct wlr_box *box,
+	struct sway_view *view, struct wlr_surface *surface, struct wlr_fbox *box,
 	void *user_data);
 
 void output_damage_whole(struct sway_output *output);
@@ -89,7 +89,7 @@ void output_damage_surface(struct sway_output *output, double ox, double oy,
 void output_damage_from_view(struct sway_output *output,
 	struct sway_view *view);
 
-void output_damage_box(struct sway_output *output, struct wlr_box *box);
+void output_damage_box(struct sway_output *output, struct wlr_fbox *box);
 
 void output_damage_whole_container(struct sway_output *output,
 	struct sway_container *con);
@@ -171,6 +171,8 @@ void render_rect(struct sway_output *output,
 void premultiply_alpha(float color[4], float opacity);
 
 void scale_box(struct wlr_box *box, float scale);
+
+void scale_fbox(struct wlr_fbox *box, double scale);
 
 enum wlr_direction opposite_direction(enum wlr_direction d);
 

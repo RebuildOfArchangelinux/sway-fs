@@ -24,7 +24,7 @@ struct seatop_move_tiling_event {
 	struct sway_container *con;
 	struct sway_node *target_node;
 	enum wlr_edges target_edge;
-	struct wlr_box drop_box;
+	struct wlr_fbox drop_box;
 	double ref_lx, ref_ly; // cursor's x/y at start of op
 	bool threshold_reached;
 	bool split_target;
@@ -42,10 +42,12 @@ static void handle_render(struct sway_seat *seat,
 		memcpy(&color, config->border_colors.focused.indicator,
 				sizeof(float) * 4);
 		premultiply_alpha(color, 0.5);
-		struct wlr_box box;
-		memcpy(&box, &e->drop_box, sizeof(struct wlr_box));
-		scale_box(&box, output->wlr_output->scale);
-		render_rect(output, damage, &box, color);
+		struct wlr_fbox box;
+		memcpy(&box, &e->drop_box, sizeof(struct wlr_fbox));
+		scale_fbox(&box, output->wlr_output->scale);
+		struct wlr_box t;
+		wlr_fbox_to_box_trunc(&t, &box);
+		render_rect(output, damage, &t, color);
 	}
 }
 
@@ -72,7 +74,7 @@ static void handle_motion_prethreshold(struct sway_seat *seat) {
 	}
 }
 
-static void resize_box(struct wlr_box *box, enum wlr_edges edge,
+static void resize_fbox(struct wlr_fbox *box, enum wlr_edges edge,
 		int thickness) {
 	switch (edge) {
 	case WLR_EDGE_TOP:
@@ -99,7 +101,7 @@ static void resize_box(struct wlr_box *box, enum wlr_edges edge,
 }
 
 static void split_border(double pos, int offset, int len, int n_children,
-		int avoid, int *out_pos, bool *out_after) {
+		int avoid, double *out_pos, bool *out_after) {
 	int region = 2 * n_children * (pos - offset) / len;
 	// If the cursor is over the right side of a left-adjacent titlebar, or the
 	// left side of a right-adjacent titlebar, it's position when dropped will
@@ -128,11 +130,11 @@ static void split_border(double pos, int offset, int len, int n_children,
 }
 
 static bool split_titlebar(struct sway_node *node, struct sway_container *avoid,
-		struct wlr_cursor *cursor, struct wlr_box *title_box, bool *after) {
+		struct wlr_cursor *cursor, struct wlr_fbox *title_box, bool *after) {
 	struct sway_container *con = node->sway_container;
 	struct sway_node *parent = &con->pending.parent->node;
 	int title_height = container_titlebar_height();
-	struct wlr_box box;
+	struct wlr_fbox box;
 	int n_children, avoid_index;
 	enum sway_container_layout layout =
 		parent ? node_get_layout(parent) : L_NONE;
@@ -187,7 +189,9 @@ static void handle_motion_postthreshold(struct sway_seat *seat) {
 		// Empty workspace
 		e->target_node = node;
 		e->target_edge = WLR_EDGE_NONE;
-		workspace_get_box(node->sway_workspace, &e->drop_box);
+		struct wlr_box t;
+		workspace_get_box(node->sway_workspace, &t);
+		wlr_box_to_fbox(&e->drop_box, &t);
 		desktop_damage_box(&e->drop_box);
 		return;
 	}
@@ -229,7 +233,7 @@ static void handle_motion_postthreshold(struct sway_seat *seat) {
 	while (con) {
 		enum wlr_edges edge = WLR_EDGE_NONE;
 		enum sway_container_layout layout = container_parent_layout(con);
-		struct wlr_box box;
+		struct wlr_fbox box;
 		node_get_box(node_get_parent(&con->node), &box);
 		if (layout == L_HORIZ || layout == L_TABBED) {
 			if (cursor->cursor->y < thresh_top) {
@@ -303,7 +307,7 @@ static void handle_motion_postthreshold(struct sway_seat *seat) {
 	e->drop_box.y = con->pending.content_y;
 	e->drop_box.width = con->pending.content_width;
 	e->drop_box.height = con->pending.content_height;
-	resize_box(&e->drop_box, e->target_edge, thickness);
+	resize_fbox(&e->drop_box, e->target_edge, thickness);
 	desktop_damage_box(&e->drop_box);
 }
 

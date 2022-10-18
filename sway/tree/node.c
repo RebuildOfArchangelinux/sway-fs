@@ -55,16 +55,20 @@ char *node_get_name(struct sway_node *node) {
 	return NULL;
 }
 
-void node_get_box(struct sway_node *node, struct wlr_box *box) {
+void node_get_box(struct sway_node *node, struct wlr_fbox *box) {
+	struct wlr_box t;
 	switch (node->type) {
 	case N_ROOT:
-		root_get_box(root, box);
+		root_get_box(root, &t);
+		wlr_box_to_fbox(box, &t);
 		break;
 	case N_OUTPUT:
-		output_get_box(node->sway_output, box);
+		output_get_box(node->sway_output, &t);
+		wlr_box_to_fbox(box, &t);
 		break;
 	case N_WORKSPACE:
-		workspace_get_box(node->sway_workspace, box);
+		workspace_get_box(node->sway_workspace, &t);
+		wlr_box_to_fbox(box, &t);
 		break;
 	case N_CONTAINER:
 		container_get_box(node->sway_container, box);

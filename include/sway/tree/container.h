@@ -222,7 +222,7 @@ bool container_is_current_floating(struct sway_container *container);
 /**
  * Get a container's box in layout coordinates.
  */
-void container_get_box(struct sway_container *container, struct wlr_box *box);
+void container_get_box(struct sway_container *container, struct wlr_fbox *box);
 
 /**
  * Move a floating container by the specified amount.

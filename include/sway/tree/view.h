@@ -91,7 +91,7 @@ struct sway_view {
 
 	// The geometry for whatever the client is committing, regardless of
 	// transaction state. Updated on every commit.
-	struct wlr_box geometry;
+	struct wlr_fbox geometry;
 
 	// The "old" geometry during a transaction. Used to damage the old location
 	// when a transaction is applied.

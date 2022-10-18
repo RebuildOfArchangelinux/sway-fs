@@ -1203,9 +1203,9 @@ void cursor_warp_to_container(struct sway_cursor *cursor,
 		return;
 	}
 
-	struct wlr_box box;
+	struct wlr_fbox box;
 	container_get_box(container, &box);
-	if (!force && wlr_box_contains_point(&box, cursor->cursor->x,
+	if (!force && wlr_fbox_contains_point(&box, cursor->cursor->x,
 			cursor->cursor->y)) {
 		return;
 	}

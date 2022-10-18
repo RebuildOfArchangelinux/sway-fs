@@ -289,7 +289,7 @@ static void handle_surface_commit(struct wl_listener *listener, void *data) {
 	struct wlr_output *wlr_output = layer_surface->output;
 	sway_assert(wlr_output, "wlr_layer_surface_v1 has null output");
 	struct sway_output *output = wlr_output->data;
-	struct wlr_box old_extent = layer->extent;
+	struct wlr_fbox old_extent = layer->extent;
 
 	bool layer_changed = false;
 	if (layer_surface->current.committed != 0
@@ -310,7 +310,7 @@ static void handle_surface_commit(struct wl_listener *listener, void *data) {
 	layer->extent.y += layer->geo.y;
 
 	bool extent_changed =
-		memcmp(&old_extent, &layer->extent, sizeof(struct wlr_box)) != 0;
+		memcmp(&old_extent, &layer->extent, sizeof(struct wlr_fbox)) != 0;
 	if (extent_changed || layer_changed) {
 		output_damage_box(output, &old_extent);
 		output_damage_surface(output, layer->geo.x, layer->geo.y,

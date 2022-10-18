@@ -21,7 +21,7 @@ void desktop_damage_whole_container(struct sway_container *con) {
 	}
 }
 
-void desktop_damage_box(struct wlr_box *box) {
+void desktop_damage_box(struct wlr_fbox *box) {
 	for (int i = 0; i < root->outputs->length; ++i) {
 		struct sway_output *output = root->outputs->items[i];
 		output_damage_box(output, box);
@@ -30,7 +30,7 @@ void desktop_damage_box(struct wlr_box *box) {
 
 void desktop_damage_view(struct sway_view *view) {
 	desktop_damage_whole_container(view->container);
-	struct wlr_box box = {
+	struct wlr_fbox box = {
 		.x = view->container->current.content_x - view->geometry.x,
 		.y = view->container->current.content_y - view->geometry.y,
 		.width = view->surface->current.width,

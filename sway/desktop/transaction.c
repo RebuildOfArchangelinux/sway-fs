@@ -237,7 +237,7 @@ static void apply_container_state(struct sway_container *container,
 	if (view && !wl_list_empty(&view->saved_buffers)) {
 		struct sway_saved_buffer *saved_buf;
 		wl_list_for_each(saved_buf, &view->saved_buffers, link) {
-			struct wlr_box box = {
+			struct wlr_fbox box = {
 				.x = saved_buf->x - view->saved_geometry.x,
 				.y = saved_buf->y - view->saved_geometry.y,
 				.width = saved_buf->width,
@@ -273,7 +273,7 @@ static void apply_container_state(struct sway_container *container,
 	desktop_damage_whole_container(container);
 	if (view && view->surface) {
 		struct wlr_surface *surface = view->surface;
-		struct wlr_box box = {
+		struct wlr_fbox box = {
 			.x = container->current.content_x - view->geometry.x,
 			.y = container->current.content_y - view->geometry.y,
 			.width = surface->current.width,
