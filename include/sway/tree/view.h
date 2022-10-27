@@ -39,7 +39,7 @@ struct sway_view_impl {
 			enum sway_view_prop prop);
 	uint32_t (*get_int_prop)(struct sway_view *view, enum sway_view_prop prop);
 	uint32_t (*configure)(struct sway_view *view, double lx, double ly,
-			int width, int height);
+			double width, double height);
 	void (*set_activated)(struct sway_view *view, bool activated);
 	void (*set_tiled)(struct sway_view *view, bool tiled);
 	void (*set_fullscreen)(struct sway_view *view, bool fullscreen);
@@ -77,7 +77,7 @@ struct sway_view {
 
 	// The size the view would want to be if it weren't tiled.
 	// Used when changing a view from tiled to floating.
-	int natural_width, natural_height;
+	double natural_width, natural_height;
 
 	char *title_format;
 

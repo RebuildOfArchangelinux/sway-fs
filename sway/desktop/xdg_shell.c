@@ -142,7 +142,7 @@ static const char *get_string_prop(struct sway_view *view,
 }
 
 static uint32_t configure(struct sway_view *view, double lx, double ly,
-		int width, int height) {
+		double width, double height) {
 	struct sway_xdg_shell_view *xdg_shell_view =
 		xdg_shell_view_from_view(view);
 	if (xdg_shell_view == NULL) {
