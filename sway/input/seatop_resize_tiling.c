@@ -75,10 +75,10 @@ static void handle_button(struct sway_seat *seat, uint32_t time_msec,
 
 static void handle_pointer_motion(struct sway_seat *seat, uint32_t time_msec) {
 	struct seatop_resize_tiling_event *e = seat->seatop_data;
-	int amount_x = 0;
-	int amount_y = 0;
-	int moved_x = seat->cursor->cursor->x - e->ref_lx;
-	int moved_y = seat->cursor->cursor->y - e->ref_ly;
+	double amount_x = 0;
+	double amount_y = 0;
+	double moved_x = seat->cursor->cursor->x - e->ref_lx;
+	double moved_y = seat->cursor->cursor->y - e->ref_ly;
 
 	if (e->h_con) {
 		if (e->edge & WLR_EDGE_LEFT) {

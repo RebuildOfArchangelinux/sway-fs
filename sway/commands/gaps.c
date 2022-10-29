@@ -24,7 +24,7 @@ struct gaps_data {
 		bool left;
 	} outer;
 	enum gaps_op operation;
-	int amount;
+	double amount;
 };
 
 // Prevent negative outer gaps from moving windows out of the workspace.
@@ -53,7 +53,7 @@ static struct cmd_results *gaps_set_defaults(int argc, char **argv) {
 	}
 
 	char *end;
-	int amount = strtol(argv[1], &end, 10);
+	double amount = strtod(argv[1], &end);
 	if (strlen(end) && strcasecmp(end, "px") != 0) {
 		return cmd_results_new(CMD_INVALID, "Expected %s", expected_defaults);
 	}
@@ -61,7 +61,7 @@ static struct cmd_results *gaps_set_defaults(int argc, char **argv) {
 	bool valid = false;
 	if (!strcasecmp(argv[0], "inner")) {
 		valid = true;
-		config->gaps_inner = (amount >= 0) ? amount : 0;
+		config->gaps_inner = (amount >= 0.) ? amount : 0.;
 	} else {
 		if (!strcasecmp(argv[0], "outer") || !strcasecmp(argv[0], "vertical")
 				|| !strcasecmp(argv[0], "top")) {
@@ -92,7 +92,7 @@ static struct cmd_results *gaps_set_defaults(int argc, char **argv) {
 	return cmd_results_new(CMD_SUCCESS, NULL);
 }
 
-static void apply_gaps_op(int *prop, enum gaps_op op, int amount) {
+static void apply_gaps_op(double *prop, enum gaps_op op, double amount) {
 	switch (op) {
 	case GAPS_OP_SET:
 		*prop = amount;
@@ -129,8 +129,8 @@ static void configure_gaps(struct sway_workspace *ws, void *_data) {
 	}
 
 	// Prevent invalid gaps configurations.
-	if (ws->gaps_inner < 0) {
-		ws->gaps_inner = 0;
+	if (ws->gaps_inner < 0.) {
+		ws->gaps_inner = 0.;
 	}
 	prevent_invalid_outer_gaps();
 	arrange_workspace(ws);
@@ -191,7 +191,7 @@ static struct cmd_results *gaps_set_runtime(int argc, char **argv) {
 	}
 
 	char *end;
-	data.amount = strtol(argv[3], &end, 10);
+	data.amount = strtod(argv[3], &end);
 	if (strlen(end) && strcasecmp(end, "px") != 0) {
 		return cmd_results_new(CMD_INVALID, "Expected %s", expected_runtime);
 	}

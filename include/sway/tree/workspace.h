@@ -10,7 +10,7 @@ struct sway_view;
 struct sway_workspace_state {
 	struct sway_container *fullscreen;
 	double x, y;
-	int width, height;
+	double width, height;
 	enum sway_container_layout layout;
 	struct sway_output *output;
 	list_t *floating;
@@ -28,12 +28,12 @@ struct sway_workspace {
 	char *representation;
 
 	double x, y;
-	int width, height;
+	double width, height;
 	enum sway_container_layout layout;
 	enum sway_container_layout prev_split_layout;
 
 	struct side_gaps current_gaps;
-	int gaps_inner;
+	double gaps_inner;
 	struct side_gaps gaps_outer;
 
 	struct sway_output *output; // NULL if no outputs are connected

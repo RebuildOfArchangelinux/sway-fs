@@ -92,7 +92,7 @@ char *cmd_results_to_json(list_t *res_list);
  * TODO: Move this function and its dependent functions to container.c.
  */
 void container_resize_tiled(struct sway_container *parent, uint32_t axis,
-		int amount);
+		double amount);
 
 struct sway_container *container_find_resize_parent(struct sway_container *con,
 		uint32_t edge);

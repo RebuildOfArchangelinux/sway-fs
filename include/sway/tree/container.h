@@ -53,7 +53,7 @@ struct sway_container_state {
 	bool focused;
 
 	enum sway_container_border border;
-	int border_thickness;
+	double border_thickness;
 	bool border_top;
 	bool border_bottom;
 	bool border_left;

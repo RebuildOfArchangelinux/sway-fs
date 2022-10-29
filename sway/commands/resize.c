@@ -64,7 +64,7 @@ struct sway_container *container_find_resize_parent(struct sway_container *con,
 }
 
 void container_resize_tiled(struct sway_container *con,
-		uint32_t axis, int amount) {
+		uint32_t axis, double amount) {
 	if (!con) {
 		return;
 	}
@@ -112,7 +112,7 @@ void container_resize_tiled(struct sway_container *con,
 	}
 
 	// Apply new dimensions
-	int sibling_amount = prev ? ceil((double)amount / 2.0) : amount;
+	double sibling_amount = prev ? ceil((double)amount / 2.0) : amount;
 
 	if (is_horizontal(axis)) {
 		if (con->pending.width + amount < MIN_SANE_W) {

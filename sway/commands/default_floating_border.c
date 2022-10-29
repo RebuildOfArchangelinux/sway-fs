@@ -22,7 +22,7 @@ struct cmd_results *cmd_default_floating_border(int argc, char **argv) {
 				"or 'default_floating_border <normal|pixel> <px>'");
 	}
 	if (argc == 2) {
-		config->floating_border_thickness = atoi(argv[1]);
+		config->floating_border_thickness = atof(argv[1]);
 	}
 
 	return cmd_results_new(CMD_SUCCESS, NULL);

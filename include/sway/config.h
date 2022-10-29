@@ -291,10 +291,10 @@ struct output_config {
  * Stores size of gaps for each side
  */
 struct side_gaps {
-	int top;
-	int right;
-	int bottom;
-	int left;
+	double top;
+	double right;
+	double bottom;
+	double left;
 };
 
 enum smart_gaps_mode {
@@ -310,7 +310,7 @@ enum smart_gaps_mode {
 struct workspace_config {
 	char *workspace;
 	list_t *outputs;
-	int gaps_inner;
+	double gaps_inner;
 	struct side_gaps gaps_outer;
 };
 
@@ -534,7 +534,7 @@ struct sway_config {
 	int tiling_drag_threshold;
 
 	enum smart_gaps_mode smart_gaps;
-	int gaps_inner;
+	double gaps_inner;
 	struct side_gaps gaps_outer;
 
 	list_t *config_chain;
@@ -546,8 +546,8 @@ struct sway_config {
 
 	enum sway_container_border border;
 	enum sway_container_border floating_border;
-	int border_thickness;
-	int floating_border_thickness;
+	double border_thickness;
+	double floating_border_thickness;
 	enum edge_border_types hide_edge_borders;
 	enum edge_border_smart_types hide_edge_borders_smart;
 	bool hide_lone_tab;

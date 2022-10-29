@@ -163,15 +163,15 @@ static void render_surface_iterator(struct sway_output *output,
 	}
 	scale_fbox(&dst_box, wlr_output->scale);
 
-	// printf("box %lf %lf %lf %lf\n", _box->x, _box->y, _box->width, _box->height);
-	// printf("src box %lf %lf %lf %lf\n", src_box.x, src_box.y, src_box.width, src_box.height);
-	// printf("dst box %lf %lf %lf %lf\n", dst_box.x, dst_box.y, dst_box.width, dst_box.height);
-	// printf("proj box %lf %lf %lf %lf\n", proj_box.x, proj_box.y, proj_box.width, proj_box.height);
+	printf("box %lf %lf %lf %lf\n", _box->x, _box->y, _box->width, _box->height);
+	printf("src box %lf %lf %lf %lf\n", src_box.x, src_box.y, src_box.width, src_box.height);
+	printf("dst box %lf %lf %lf %lf\n", dst_box.x, dst_box.y, dst_box.width, dst_box.height);
+	printf("proj box %lf %lf %lf %lf\n", proj_box.x, proj_box.y, proj_box.width, proj_box.height);
 	// if (clip_box != NULL)
 	// 	printf("clip box %d %d %d %d\n", clip_box->x, clip_box->y, clip_box->width, clip_box->height);
 	// printf("damage %d %d %d %d\n", output_damage->extents.x1, output_damage->extents.y1,
 	// 	output_damage->extents.x2, output_damage->extents.y2);
-	// printf("texture %d,%d\n", texture->width, texture->height);
+	printf("texture %d,%d\n", texture->width, texture->height);
 	render_texture(wlr_output, output_damage, texture,
 		&src_box, &dst_box, matrix, alpha);
 
@@ -374,7 +374,7 @@ static void render_view(struct sway_output *output, pixman_region32_t *damage,
 		return;
 	}
 
-	struct wlr_box box;
+	struct wlr_fbox box;
 	float output_scale = output->wlr_output->scale;
 	float color[4];
 	struct sway_container_state *state = &con->current;
@@ -382,11 +382,11 @@ static void render_view(struct sway_output *output, pixman_region32_t *damage,
 	if (state->border_left) {
 		memcpy(&color, colors->child_border, sizeof(float) * 4);
 		premultiply_alpha(color, con->alpha);
-		box.x = floor(state->x);
-		box.y = floor(state->content_y);
+		box.x = state->x;
+		box.y = state->content_y;
 		box.width = state->border_thickness;
 		box.height = state->content_height;
-		scale_box(&box, output_scale);
+		scale_fbox(&box, output_scale);
 		render_rect(output, damage, &box, color);
 	}
 
@@ -401,11 +401,11 @@ static void render_view(struct sway_output *output, pixman_region32_t *damage,
 			memcpy(&color, colors->child_border, sizeof(float) * 4);
 		}
 		premultiply_alpha(color, con->alpha);
-		box.x = floor(state->content_x + state->content_width);
-		box.y = floor(state->content_y);
+		box.x = state->content_x + state->content_width;
+		box.y = state->content_y;
 		box.width = state->border_thickness;
 		box.height = state->content_height;
-		scale_box(&box, output_scale);
+		scale_fbox(&box, output_scale);
 		render_rect(output, damage, &box, color);
 	}
 
@@ -416,11 +416,11 @@ static void render_view(struct sway_output *output, pixman_region32_t *damage,
 			memcpy(&color, colors->child_border, sizeof(float) * 4);
 		}
 		premultiply_alpha(color, con->alpha);
-		box.x = floor(state->x);
-		box.y = floor(state->content_y + state->content_height);
+		box.x = state->x;
+		box.y = state->content_y + state->content_height;
 		box.width = state->width;
 		box.height = state->border_thickness;
-		scale_box(&box, output_scale);
+		scale_fbox(&box, output_scale);
 		render_rect(output, damage, &box, color);
 	}
 }
