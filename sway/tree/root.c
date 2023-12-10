@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/types/wlr_output_layout.h>
+#include <wlr/util/transform.h>
 #include "sway/desktop/transaction.h"
 #include "sway/input/seat.h"
 #include "sway/ipc-server.h"
@@ -23,14 +24,14 @@ static void output_layout_handle_change(struct wl_listener *listener,
 	transaction_commit_dirty();
 }
 
-struct sway_root *root_create(void) {
+struct sway_root *root_create(struct wl_display *wl_display) {
 	struct sway_root *root = calloc(1, sizeof(struct sway_root));
 	if (!root) {
 		sway_log(SWAY_ERROR, "Unable to allocate sway_root");
 		return NULL;
 	}
 	node_init(&root->node, N_ROOT, root);
-	root->output_layout = wlr_output_layout_create();
+	root->output_layout = wlr_output_layout_create(wl_display);
 	wl_list_init(&root->all_outputs);
 #if HAVE_XWAYLAND
 	wl_list_init(&root->xwayland_unmanaged);
@@ -50,9 +51,19 @@ struct sway_root *root_create(void) {
 void root_destroy(struct sway_root *root) {
 	wl_list_remove(&root->output_layout_change.link);
 	list_free(root->scratchpad);
+	list_free(root->non_desktop_outputs);
 	list_free(root->outputs);
-	wlr_output_layout_destroy(root->output_layout);
 	free(root);
+}
+
+static void set_container_transform(struct sway_workspace *ws,
+			struct sway_container *con) {
+	struct sway_output *output = ws->output;
+	struct wlr_box box = {0};
+	if (output) {
+		output_get_box(output, &box);
+	}
+	con->transform = box;
 }
 
 void root_scratchpad_add_container(struct sway_container *con, struct sway_workspace *ws) {
@@ -62,6 +73,8 @@ void root_scratchpad_add_container(struct sway_container *con, struct sway_works
 
 	struct sway_container *parent = con->pending.parent;
 	struct sway_workspace *workspace = con->pending.workspace;
+
+	set_container_transform(workspace, con);
 
 	// Clear the fullscreen mode when sending to the scratchpad
 	if (con->pending.fullscreen_mode != FULLSCREEN_NONE) {
@@ -132,7 +145,10 @@ void root_scratchpad_show(struct sway_container *con) {
 	// Show the container
 	if (old_ws) {
 		container_detach(con);
-		workspace_consider_destroy(old_ws);
+		// Make sure the last inactive container on the old workspace is above
+		// the workspace itself in the focus stack.
+		struct sway_node *node = seat_get_focus_inactive(seat, &old_ws->node);
+		seat_set_raw_focus(seat, node);
 	} else {
 		// Act on the ancestor of scratchpad hidden split containers
 		while (con->pending.parent) {
@@ -141,18 +157,18 @@ void root_scratchpad_show(struct sway_container *con) {
 	}
 	workspace_add_floating(new_ws, con);
 
-	// Make sure the container's center point overlaps this workspace
-	double center_lx = con->pending.x + con->pending.width / 2;
-	double center_ly = con->pending.y + con->pending.height / 2;
-
-	struct wlr_box workspace_box;
-	workspace_get_box(new_ws, &workspace_box);
-	if (!wlr_box_contains_point(&workspace_box, center_lx, center_ly)) {
-		container_floating_resize_and_center(con);
+	if (new_ws->output) {
+		struct wlr_box output_box;
+		output_get_box(new_ws->output, &output_box);
+		floating_fix_coordinates(con, &con->transform, &output_box);
 	}
+	set_container_transform(new_ws, con);
 
 	arrange_workspace(new_ws);
 	seat_set_focus(seat, seat_get_focus_inactive(seat, &con->node));
+	if (old_ws) {
+		workspace_consider_destroy(old_ws);
+	}
 }
 
 static void disable_fullscreen(struct sway_container *con, void *data) {
@@ -172,6 +188,8 @@ void root_scratchpad_hide(struct sway_container *con) {
 		return;
 	}
 
+	set_container_transform(con->pending.workspace, con);
+
 	disable_fullscreen(con, NULL);
 	container_for_each_child(con, disable_fullscreen, NULL);
 	container_detach(con);
@@ -182,172 +200,6 @@ void root_scratchpad_hide(struct sway_container *con) {
 	list_move_to_end(root->scratchpad, con);
 
 	ipc_event_window(con, "move");
-}
-
-struct pid_workspace {
-	pid_t pid;
-	char *workspace;
-	struct timespec time_added;
-
-	struct sway_output *output;
-	struct wl_listener output_destroy;
-
-	struct wl_list link;
-};
-
-static struct wl_list pid_workspaces;
-
-/**
- * Get the pid of a parent process given the pid of a child process.
- *
- * Returns the parent pid or NULL if the parent pid cannot be determined.
- */
-static pid_t get_parent_pid(pid_t child) {
-	pid_t parent = -1;
-	char file_name[100];
-	char *buffer = NULL;
-	const char *sep = " ";
-	FILE *stat = NULL;
-	size_t buf_size = 0;
-
-	snprintf(file_name, sizeof(file_name), "/proc/%d/stat", child);
-
-	if ((stat = fopen(file_name, "r"))) {
-		if (getline(&buffer, &buf_size, stat) != -1) {
-			strtok(buffer, sep); // pid
-			strtok(NULL, sep);   // executable name
-			strtok(NULL, sep);   // state
-			char *token = strtok(NULL, sep);   // parent pid
-			parent = strtol(token, NULL, 10);
-		}
-		free(buffer);
-		fclose(stat);
-	}
-
-	if (parent) {
-		return (parent == child) ? -1 : parent;
-	}
-
-	return -1;
-}
-
-static void pid_workspace_destroy(struct pid_workspace *pw) {
-	wl_list_remove(&pw->output_destroy.link);
-	wl_list_remove(&pw->link);
-	free(pw->workspace);
-	free(pw);
-}
-
-struct sway_workspace *root_workspace_for_pid(pid_t pid) {
-	if (!pid_workspaces.prev && !pid_workspaces.next) {
-		wl_list_init(&pid_workspaces);
-		return NULL;
-	}
-
-	struct sway_workspace *ws = NULL;
-	struct pid_workspace *pw = NULL;
-
-	sway_log(SWAY_DEBUG, "Looking up workspace for pid %d", pid);
-
-	do {
-		struct pid_workspace *_pw = NULL;
-		wl_list_for_each(_pw, &pid_workspaces, link) {
-			if (pid == _pw->pid) {
-				pw = _pw;
-				sway_log(SWAY_DEBUG,
-						"found pid_workspace for pid %d, workspace %s",
-						pid, pw->workspace);
-				goto found;
-			}
-		}
-		pid = get_parent_pid(pid);
-	} while (pid > 1);
-found:
-
-	if (pw && pw->workspace) {
-		ws = workspace_by_name(pw->workspace);
-
-		if (!ws) {
-			sway_log(SWAY_DEBUG,
-					"Creating workspace %s for pid %d because it disappeared",
-					pw->workspace, pid);
-
-			struct sway_output *output = pw->output;
-			if (pw->output && !pw->output->enabled) {
-				sway_log(SWAY_DEBUG,
-						"Workspace output %s is disabled, trying another one",
-						pw->output->wlr_output->name);
-				output = NULL;
-			}
-
-			ws = workspace_create(output, pw->workspace);
-		}
-
-		pid_workspace_destroy(pw);
-	}
-
-	return ws;
-}
-
-static void pw_handle_output_destroy(struct wl_listener *listener, void *data) {
-	struct pid_workspace *pw = wl_container_of(listener, pw, output_destroy);
-	pw->output = NULL;
-	wl_list_remove(&pw->output_destroy.link);
-	wl_list_init(&pw->output_destroy.link);
-}
-
-void root_record_workspace_pid(pid_t pid) {
-	sway_log(SWAY_DEBUG, "Recording workspace for process %d", pid);
-	if (!pid_workspaces.prev && !pid_workspaces.next) {
-		wl_list_init(&pid_workspaces);
-	}
-
-	struct sway_seat *seat = input_manager_current_seat();
-	struct sway_workspace *ws = seat_get_focused_workspace(seat);
-	if (!ws) {
-		sway_log(SWAY_DEBUG, "Bailing out, no workspace");
-		return;
-	}
-	struct sway_output *output = ws->output;
-	if (!output) {
-		sway_log(SWAY_DEBUG, "Bailing out, no output");
-		return;
-	}
-
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-
-	// Remove expired entries
-	static const int timeout = 60;
-	struct pid_workspace *old, *_old;
-	wl_list_for_each_safe(old, _old, &pid_workspaces, link) {
-		if (now.tv_sec - old->time_added.tv_sec >= timeout) {
-			pid_workspace_destroy(old);
-		}
-	}
-
-	struct pid_workspace *pw = calloc(1, sizeof(struct pid_workspace));
-	pw->workspace = strdup(ws->name);
-	pw->output = output;
-	pw->pid = pid;
-	memcpy(&pw->time_added, &now, sizeof(struct timespec));
-	pw->output_destroy.notify = pw_handle_output_destroy;
-	wl_signal_add(&output->wlr_output->events.destroy, &pw->output_destroy);
-	wl_list_insert(&pid_workspaces, &pw->link);
-}
-
-void root_remove_workspace_pid(pid_t pid) {
-	if (!pid_workspaces.prev || !pid_workspaces.next) {
-		return;
-	}
-
-	struct pid_workspace *pw, *tmp;
-	wl_list_for_each_safe(pw, tmp, &pid_workspaces, link) {
-		if (pid == pw->pid) {
-			pid_workspace_destroy(pw);
-			return;
-		}
-	}
 }
 
 void root_for_each_workspace(void (*f)(struct sway_workspace *ws, void *data),
@@ -443,18 +295,4 @@ void root_get_box(struct sway_root *root, struct wlr_box *box) {
 	box->y = root->y;
 	box->width = root->width;
 	box->height = root->height;
-}
-
-void root_rename_pid_workspaces(const char *old_name, const char *new_name) {
-	if (!pid_workspaces.prev && !pid_workspaces.next) {
-		wl_list_init(&pid_workspaces);
-	}
-
-	struct pid_workspace *pw = NULL;
-	wl_list_for_each(pw, &pid_workspaces, link) {
-		if (strcmp(pw->workspace, old_name) == 0) {
-			free(pw->workspace);
-			pw->workspace = strdup(new_name);
-		}
-	}
 }

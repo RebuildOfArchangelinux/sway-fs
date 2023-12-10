@@ -37,7 +37,7 @@ struct sway_config *config = NULL;
 
 static struct xkb_state *keysym_translation_state_create(
 		struct xkb_rule_names rules) {
-	struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+	struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_SECURE_GETENV);
 	struct xkb_keymap *xkb_keymap = xkb_keymap_new_from_names(
 		context,
 		&rules,
@@ -273,6 +273,7 @@ static void config_defaults(struct sway_config *config) {
 	config->title_align = ALIGN_LEFT;
 	config->tiling_drag = true;
 	config->tiling_drag_threshold = 9;
+	config->primary_selection = true;
 
 	config->smart_gaps = SMART_GAPS_OFF;
 	config->gaps_inner = 0;
@@ -923,23 +924,18 @@ void config_add_swaynag_warning(char *fmt, ...) {
 	if (config->reading && !config->validating) {
 		va_list args;
 		va_start(args, fmt);
-		size_t length = vsnprintf(NULL, 0, fmt, args) + 1;
+		char *str = vformat_str(fmt, args);
 		va_end(args);
-
-		char *temp = malloc(length + 1);
-		if (!temp) {
-			sway_log(SWAY_ERROR, "Failed to allocate buffer for warning.");
+		if (str == NULL) {
 			return;
 		}
-
-		va_start(args, fmt);
-		vsnprintf(temp, length, fmt, args);
-		va_end(args);
 
 		swaynag_log(config->swaynag_command, &config->swaynag_config_errors,
 			"Warning on line %i (%s) '%s': %s",
 			config->current_config_line_number, config->current_config_path,
-			config->current_config_line, temp);
+			config->current_config_line, str);
+
+		free(str);
 	}
 }
 
@@ -979,7 +975,7 @@ char *do_var_replacement(char *str) {
 				int offset = find - str;
 				strncpy(newptr, str, offset);
 				newptr += offset;
-				strncpy(newptr, var->value, vvlen);
+				memcpy(newptr, var->value, vvlen);
 				newptr += vvlen;
 				strcpy(newptr, find + vnlen);
 				free(str);

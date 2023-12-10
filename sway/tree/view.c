@@ -20,11 +20,13 @@
 #include "sway/desktop.h"
 #include "sway/desktop/transaction.h"
 #include "sway/desktop/idle_inhibit_v1.h"
+#include "sway/desktop/launcher.h"
 #include "sway/input/cursor.h"
 #include "sway/ipc-server.h"
 #include "sway/output.h"
 #include "sway/input/seat.h"
 #include "sway/server.h"
+#include "sway/surface.h"
 #include "sway/tree/arrange.h"
 #include "sway/tree/container.h"
 #include "sway/tree/view.h"
@@ -63,6 +65,8 @@ void view_destroy(struct sway_view *view) {
 		view_remove_saved_buffer(view);
 	}
 	list_free(view->executed_criteria);
+
+	view_assign_ctx(view, NULL);
 
 	free(view->title_format);
 
@@ -364,17 +368,17 @@ void view_set_activated(struct sway_view *view, bool activated) {
 	}
 }
 
-void view_request_activate(struct sway_view *view) {
+void view_request_activate(struct sway_view *view, struct sway_seat *seat) {
 	struct sway_workspace *ws = view->container->pending.workspace;
-	if (!ws) { // hidden scratchpad container
-		return;
+	if (!seat) {
+		seat = input_manager_current_seat();
 	}
-	struct sway_seat *seat = input_manager_current_seat();
 
 	switch (config->focus_on_window_activation) {
 	case FOWA_SMART:
-		if (workspace_is_visible(ws)) {
+		if (ws && workspace_is_visible(ws)) {
 			seat_set_focus_container(seat, view->container);
+			container_raise_floating(view->container);
 		} else {
 			view_set_urgent(view, true);
 		}
@@ -383,11 +387,17 @@ void view_request_activate(struct sway_view *view) {
 		view_set_urgent(view, true);
 		break;
 	case FOWA_FOCUS:
-		seat_set_focus_container(seat, view->container);
+		if (container_is_scratchpad_hidden_or_child(view->container)) {
+			root_scratchpad_show(view->container);
+		} else {
+			seat_set_focus_container(seat, view->container);
+			container_raise_floating(view->container);
+		}
 		break;
 	case FOWA_NONE:
 		break;
 	}
+	transaction_commit_dirty();
 }
 
 void view_set_csd_from_server(struct sway_view *view, bool enabled) {
@@ -521,7 +531,7 @@ static void view_populate_pid(struct sway_view *view) {
 #if HAVE_XWAYLAND
 	case SWAY_VIEW_XWAYLAND:;
 		struct wlr_xwayland_surface *surf =
-			wlr_xwayland_surface_from_wlr_surface(view->surface);
+			wlr_xwayland_surface_try_from_wlr_surface(view->surface);
 		pid = surf->pid;
 		break;
 #endif
@@ -532,6 +542,20 @@ static void view_populate_pid(struct sway_view *view) {
 		break;
 	}
 	view->pid = pid;
+}
+
+void view_assign_ctx(struct sway_view *view, struct launcher_ctx *ctx) {
+	if (view->ctx) {
+		// This ctx has been replaced
+		launcher_ctx_destroy(view->ctx);
+		view->ctx = NULL;
+	}
+	if (ctx == NULL) {
+		return;
+	}
+	launcher_ctx_consume(ctx);
+
+	view->ctx = ctx;
 }
 
 static struct sway_workspace *select_workspace(struct sway_view *view) {
@@ -569,13 +593,14 @@ static struct sway_workspace *select_workspace(struct sway_view *view) {
 	}
 	list_free(criterias);
 	if (ws) {
-		root_remove_workspace_pid(view->pid);
+		view_assign_ctx(view, NULL);
 		return ws;
 	}
 
 	// Check if there's a PID mapping
-	ws = root_workspace_for_pid(view->pid);
+	ws = view->ctx ? launcher_ctx_get_workspace(view->ctx) : NULL;
 	if (ws) {
+		view_assign_ctx(view, NULL);
 		return ws;
 	}
 
@@ -718,6 +743,13 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 	view_populate_pid(view);
 	view->container = container_create(view);
 
+	if (view->ctx == NULL) {
+		struct launcher_ctx *ctx = launcher_ctx_find_pid(view->pid);
+		if (ctx != NULL) {
+			view_assign_ctx(view, ctx);
+		}
+	}
+
 	// If there is a request to be opened fullscreen on a specific output, try
 	// to honor that request. Otherwise, fallback to assigns, pid mappings,
 	// focused workspace, etc
@@ -826,9 +858,8 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 	bool set_focus = should_focus(view);
 
 #if HAVE_XWAYLAND
-	if (wlr_surface_is_xwayland_surface(wlr_surface)) {
-		struct wlr_xwayland_surface *xsurface =
-				wlr_xwayland_surface_from_wlr_surface(wlr_surface);
+	struct wlr_xwayland_surface *xsurface;
+	if ((xsurface = wlr_xwayland_surface_try_from_wlr_surface(wlr_surface))) {
 		set_focus &= wlr_xwayland_icccm_input_model(xsurface) !=
 				WLR_ICCCM_INPUT_MODEL_NONE;
 	}
@@ -848,9 +879,11 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 }
 
 void view_unmap(struct sway_view *view) {
-	wl_signal_emit(&view->events.unmap, view);
+	wl_signal_emit_mutable(&view->events.unmap, view);
 
 	wl_list_remove(&view->surface_new_subsurface.link);
+
+	view->executed_criteria->length = 0;
 
 	if (view->urgent_timer) {
 		wl_event_source_remove(view->urgent_timer);
@@ -929,7 +962,7 @@ static void subsurface_get_view_coords(struct sway_view_child *child,
 		*sx = *sy = 0;
 	}
 	struct wlr_subsurface *subsurface =
-		wlr_subsurface_from_wlr_surface(surface);
+		wlr_subsurface_try_from_wlr_surface(surface);
 	*sx += subsurface->current.x;
 	*sy += subsurface->current.y;
 }
@@ -1124,8 +1157,8 @@ void view_child_init(struct sway_view_child *child,
 	if (container != NULL) {
 		struct sway_workspace *workspace = container->pending.workspace;
 		if (workspace) {
-			wlr_fractional_scale_v1_notify_scale(child->surface, workspace->output->wlr_output->scale);
-			wlr_surface_send_enter(child->surface, workspace->output->wlr_output);
+			// wlr_fractional_scale_v1_notify_scale(child->surface, workspace->output->wlr_output->scale);
+			surface_enter_output(child->surface, workspace->output);
 		}
 	}
 
@@ -1166,33 +1199,21 @@ void view_child_destroy(struct sway_view_child *child) {
 }
 
 struct sway_view *view_from_wlr_surface(struct wlr_surface *wlr_surface) {
-	if (wlr_surface_is_xdg_surface(wlr_surface)) {
-		struct wlr_xdg_surface *xdg_surface =
-			wlr_xdg_surface_from_wlr_surface(wlr_surface);
-		if (xdg_surface == NULL) {
-			return NULL;
-		}
+	struct wlr_xdg_surface *xdg_surface;
+	if ((xdg_surface = wlr_xdg_surface_try_from_wlr_surface(wlr_surface))) {
 		return view_from_wlr_xdg_surface(xdg_surface);
 	}
 #if HAVE_XWAYLAND
-	if (wlr_surface_is_xwayland_surface(wlr_surface)) {
-		struct wlr_xwayland_surface *xsurface =
-			wlr_xwayland_surface_from_wlr_surface(wlr_surface);
-		if (xsurface == NULL) {
-			return NULL;
-		}
+	struct wlr_xwayland_surface *xsurface;
+	if ((xsurface = wlr_xwayland_surface_try_from_wlr_surface(wlr_surface))) {
 		return view_from_wlr_xwayland_surface(xsurface);
 	}
 #endif
-	if (wlr_surface_is_subsurface(wlr_surface)) {
-		struct wlr_subsurface *subsurface =
-			wlr_subsurface_from_wlr_surface(wlr_surface);
-		if (subsurface == NULL) {
-			return NULL;
-		}
+	struct wlr_subsurface *subsurface;
+	if ((subsurface = wlr_subsurface_try_from_wlr_surface(wlr_surface))) {
 		return view_from_wlr_surface(subsurface->parent);
 	}
-	if (wlr_surface_is_layer_surface(wlr_surface)) {
+	if (wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface) != NULL) {
 		return NULL;
 	}
 
@@ -1288,20 +1309,22 @@ void view_update_title(struct sway_view *view, bool force) {
 
 	free(view->container->title);
 	free(view->container->formatted_title);
-	if (title) {
-		size_t len = parse_title_format(view, NULL);
+
+	size_t len = parse_title_format(view, NULL);
+
+	if (len) {
 		char *buffer = calloc(len + 1, sizeof(char));
 		if (!sway_assert(buffer, "Unable to allocate title string")) {
 			return;
 		}
-		parse_title_format(view, buffer);
 
-		view->container->title = strdup(title);
+		parse_title_format(view, buffer);
 		view->container->formatted_title = buffer;
 	} else {
-		view->container->title = NULL;
 		view->container->formatted_title = NULL;
 	}
+
+	view->container->title = title ? strdup(title) : NULL;
 
 	// Update title after the global font height is updated
 	container_update_title_textures(view->container);
@@ -1407,7 +1430,7 @@ static void view_save_buffer_iterator(struct wlr_surface *surface,
 		int sx, int sy, void *data) {
 	struct sway_view *view = data;
 
-	if (surface && wlr_surface_has_buffer(surface)) {
+	if (surface && surface->buffer) {
 		wlr_buffer_lock(&surface->buffer->base);
 		struct sway_saved_buffer *saved_buffer = calloc(1, sizeof(struct sway_saved_buffer));
 		saved_buffer->buffer = surface->buffer;

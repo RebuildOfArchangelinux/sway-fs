@@ -20,11 +20,14 @@ packages:
 - devel/libudev-devd
 - graphics/libdrm
 - graphics/mesa-libs
+- sysutils/libdisplay-info
 - sysutils/seatd
 - x11/libinput
 - x11/libX11
 - x11/pixman
 - x11/xcb-util-wm
+- x11-servers/xwayland-devel
+- misc/hwdata
 sources:
 - https://github.com/swaywm/sway
 - https://gitlab.freedesktop.org/wlroots/wlroots.git

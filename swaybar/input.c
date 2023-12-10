@@ -81,8 +81,16 @@ void update_cursor(struct swaybar_seat *seat) {
 	int scale = pointer->current ? pointer->current->scale : 1;
 	pointer->cursor_theme = wl_cursor_theme_load(
 		cursor_theme, cursor_size * scale, seat->bar->shm);
+	if (!pointer->cursor_theme) {
+		sway_log(SWAY_ERROR, "Failed to load cursor theme");
+		return;
+	}
 	struct wl_cursor *cursor;
-	cursor = wl_cursor_theme_get_cursor(pointer->cursor_theme, "left_ptr");
+	cursor = wl_cursor_theme_get_cursor(pointer->cursor_theme, "default");
+	if (!cursor) {
+		sway_log(SWAY_ERROR, "Failed to get default cursor from theme");
+		return;
+	}
 	pointer->cursor_image = cursor->images[0];
 	wl_surface_set_buffer_scale(pointer->cursor_surface, scale);
 	wl_surface_attach(pointer->cursor_surface,
@@ -103,7 +111,7 @@ static void wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
 	struct swaybar_pointer *pointer = &seat->pointer;
 	seat->pointer.x = wl_fixed_to_double(surface_x);
 	seat->pointer.y = wl_fixed_to_double(surface_y);
-	pointer->serial = serial;
+
 	struct swaybar_output *output;
 	wl_list_for_each(output, &seat->bar->outputs, link) {
 		if (output->surface == surface) {
@@ -111,7 +119,18 @@ static void wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
 			break;
 		}
 	}
-	update_cursor(seat);
+
+	if (seat->bar->cursor_shape_manager) {
+		struct wp_cursor_shape_device_v1 *device =
+			wp_cursor_shape_manager_v1_get_pointer(
+				seat->bar->cursor_shape_manager, wl_pointer);
+		wp_cursor_shape_device_v1_set_shape(device, serial,
+			WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT);
+		wp_cursor_shape_device_v1_destroy(device);
+	} else {
+		pointer->serial = serial;
+		update_cursor(seat);
+	}
 }
 
 static void wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
@@ -141,14 +160,15 @@ static bool check_bindings(struct swaybar *bar, uint32_t button,
 }
 
 static bool process_hotspots(struct swaybar_output *output,
-		double x, double y, uint32_t button) {
+		double x, double y, uint32_t button, uint32_t state) {
+	bool released = state == WL_POINTER_BUTTON_STATE_RELEASED;
 	struct swaybar_hotspot *hotspot;
 	wl_list_for_each(hotspot, &output->hotspots, link) {
 		if (x >= hotspot->x && y >= hotspot->y
 				&& x < hotspot->x + hotspot->width
 				&& y < hotspot->y + hotspot->height) {
 			if (HOTSPOT_IGNORE == hotspot->callback(output, hotspot, x, y,
-					button, hotspot->data)) {
+					button, released, hotspot->data)) {
 				return true;
 			}
 		}
@@ -166,14 +186,11 @@ static void wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
 		return;
 	}
 
-	if (check_bindings(seat->bar, button, state)) {
+	if (process_hotspots(output, pointer->x, pointer->y, button, state)) {
 		return;
 	}
 
-	if (state != WL_POINTER_BUTTON_STATE_PRESSED) {
-		return;
-	}
-	process_hotspots(output, pointer->x, pointer->y, button);
+	check_bindings(seat->bar, button, state);
 }
 
 static void workspace_next(struct swaybar *bar, struct swaybar_output *output,
@@ -209,7 +226,7 @@ static void workspace_next(struct swaybar *bar, struct swaybar_output *output,
 		}
 	}
 
-	if (new) {
+	if (new && new != active) {
 		ipc_send_workspace_command(bar, new->name);
 
 		// Since we're asking Sway to switch to 'new', it should become visible.
@@ -222,15 +239,15 @@ static void workspace_next(struct swaybar *bar, struct swaybar_output *output,
 static void process_discrete_scroll(struct swaybar_seat *seat,
 		struct swaybar_output *output, struct swaybar_pointer *pointer,
 		uint32_t axis, wl_fixed_t value) {
-	// If there is a button press binding, execute it, skip default behavior,
-	// and check button release bindings
 	uint32_t button = wl_axis_to_button(axis, value);
-	if (check_bindings(seat->bar, button, WL_POINTER_BUTTON_STATE_PRESSED)) {
-		check_bindings(seat->bar, button, WL_POINTER_BUTTON_STATE_RELEASED);
+	if (process_hotspots(output, pointer->x, pointer->y, button, WL_POINTER_BUTTON_STATE_PRESSED)) {
+		// (Currently hotspots don't do anything on release events, so no need to emit one)
 		return;
 	}
 
-	if (process_hotspots(output, pointer->x, pointer->y, button)) {
+	// If there is a button press binding, execute it, and check button release bindings
+	if (check_bindings(seat->bar, button, WL_POINTER_BUTTON_STATE_PRESSED)) {
+		check_bindings(seat->bar, button, WL_POINTER_BUTTON_STATE_RELEASED);
 		return;
 	}
 
@@ -403,7 +420,8 @@ static void wl_touch_up(void *data, struct wl_touch *wl_touch,
 	}
 	if (time - slot->time < 500) {
 		// Tap, treat it like a pointer click
-		process_hotspots(slot->output, slot->x, slot->y, BTN_LEFT);
+		process_hotspots(slot->output, slot->x, slot->y, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
+		// (Currently hotspots don't do anything on release events, so no need to emit one)
 	}
 	slot->output = NULL;
 }

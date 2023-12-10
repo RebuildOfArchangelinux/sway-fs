@@ -4,6 +4,7 @@ packages:
   - eudev-dev
   - gdk-pixbuf-dev
   - json-c-dev
+  - libdisplay-info-dev
   - libevdev-dev
   - libinput-dev
   - libseat-dev
@@ -19,7 +20,8 @@ packages:
   - wayland-protocols
   - xcb-util-image-dev
   - xcb-util-wm-dev
-  - xwayland
+  - xwayland-dev
+  - hwdata-dev
 sources:
   - https://github.com/swaywm/sway
   - https://gitlab.freedesktop.org/wlroots/wlroots.git

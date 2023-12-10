@@ -337,8 +337,9 @@ node and will have the following properties:
    this, but borders are included.
 |- window_rect
 :  object
-:  The geometry of the contents inside the node. The window decorations are
-   excluded from this calculation, but borders are included.
+:  The geometry of the content inside the node. These coordinates are relative
+   to the node itself. Window decorations and borders are outside the
+   _window_rect_
 |- deco_rect
 :  object
 :  The geometry of the decorations for the node relative to the parent node
@@ -1194,9 +1195,16 @@ following properties will be included for devices that support them:
 :  int
 :  The scroll button to use when _scroll_method_ is _on_button_down_. This
    will be given as an input event code
+|- scroll_button_lock
+:  string
+:  Whether scroll button lock is enabled. It can be _enabled_ or _disabled_
 |- dwt
 :  string
 :  Whether disable-while-typing is enabled. It can be _enabled_ or _disabled_
+|- dwtp
+:  string
+:  Whether disable-while-trackpointing is enabled. It can be _enabled_ or
+  _disabled_
 |- calibration_matrix
 :  array
 :  An array of 6 floats representing the calibration matrix for absolute
@@ -1236,7 +1244,8 @@ following properties will be included for devices that support them:
 			"click_method": "button_areas",
 			"middle_emulation": "disabled",
 			"scroll_method": "edge",
-			"dwt": "enabled"
+			"dwt": "enabled",
+			"dwtp": "enabled"
 		}
 	},
 	{
@@ -1363,7 +1372,8 @@ one seat. Each object has the following properties:
 					"click_method": "button_areas",
 					"middle_emulation": "disabled",
 					"scroll_method": "edge",
-					"dwt": "enabled"
+					"dwt": "enabled",
+					"dwtp": "enabled"
 				}
 			},
 			{
@@ -1439,6 +1449,9 @@ available:
 :  workspace
 :[ Sent whenever an event involving a workspace occurs such as initialization
    of a new workspace or a different workspace gains focus
+|- 0x80000001
+:  output
+:  Sent when outputs are updated
 |- 0x80000002
 :  mode
 :  Sent whenever the binding mode changes
@@ -1556,6 +1569,20 @@ The following change types are currently available:
 		"nodes": [
 		]
 	}
+}
+```
+
+## 0x80000001. OUTPUT
+
+Sent whenever an output is added, removed, or its configuration is changed.
+The event is a single object with the property _change_, which is a string
+containing the reason for the change. Currently, the only value for _change_ is
+_unspecified_.
+
+*Example Event:*
+```
+{
+	"change": "unspecified"
 }
 ```
 

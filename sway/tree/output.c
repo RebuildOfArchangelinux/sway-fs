@@ -3,7 +3,6 @@
 #include <ctype.h>
 #include <string.h>
 #include <strings.h>
-#include <wlr/types/wlr_output_damage.h>
 #include "sway/ipc-server.h"
 #include "sway/layers.h"
 #include "sway/output.h"
@@ -147,7 +146,7 @@ void output_enable(struct sway_output *output) {
 
 	input_manager_configure_xcursor();
 
-	wl_signal_emit(&root->events.new_node, &output->node);
+	wl_signal_emit_mutable(&root->events.new_node, &output->node);
 
 	arrange_layers(output);
 	arrange_root();
@@ -263,7 +262,7 @@ void output_disable(struct sway_output *output) {
 	}
 
 	sway_log(SWAY_DEBUG, "Disabling output '%s'", output->wlr_output->name);
-	wl_signal_emit(&output->events.disable, output);
+	wl_signal_emit_mutable(&output->events.disable, output);
 
 	output_evacuate(output);
 
@@ -272,14 +271,13 @@ void output_disable(struct sway_output *output) {
 	list_del(root->outputs, index);
 
 	output->enabled = false;
-	output->current_mode = NULL;
 
 	arrange_root();
 
 	// Reconfigure all devices, since devices with map_to_output directives for
 	// an output that goes offline should stop sending events as long as the
 	// output remains offline.
-	input_manager_configure_all_inputs();
+	input_manager_configure_all_input_mappings();
 }
 
 void output_begin_destroy(struct sway_output *output) {
@@ -287,7 +285,7 @@ void output_begin_destroy(struct sway_output *output) {
 		return;
 	}
 	sway_log(SWAY_DEBUG, "Destroying output '%s'", output->wlr_output->name);
-	wl_signal_emit(&output->node.events.destroy, &output->node);
+	wl_signal_emit_mutable(&output->node.events.destroy, &output->node);
 
 	output->node.destroying = true;
 	node_set_dirty(&output->node);

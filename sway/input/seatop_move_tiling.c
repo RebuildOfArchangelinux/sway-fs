@@ -31,23 +31,22 @@ struct seatop_move_tiling_event {
 	bool insert_after_target;
 };
 
-static void handle_render(struct sway_seat *seat,
-		struct sway_output *output, pixman_region32_t *damage) {
+static void handle_render(struct sway_seat *seat, struct render_context *ctx) {
 	struct seatop_move_tiling_event *e = seat->seatop_data;
 	if (!e->threshold_reached) {
 		return;
 	}
-	if (e->target_node && node_get_output(e->target_node) == output) {
+	if (e->target_node && node_get_output(e->target_node) == ctx->output) {
 		float color[4];
 		memcpy(&color, config->border_colors.focused.indicator,
 				sizeof(float) * 4);
 		premultiply_alpha(color, 0.5);
 		struct wlr_fbox box;
 		memcpy(&box, &e->drop_box, sizeof(struct wlr_fbox));
-		scale_fbox(&box, output->wlr_output->scale);
+		scale_fbox(&box, ctx->output->wlr_output->scale);
 		struct wlr_box t;
 		wlr_fbox_to_box_trunc(&t, &box);
-		render_rect(output, damage, &t, color);
+		render_rect(ctx, &t, color);
 	}
 }
 

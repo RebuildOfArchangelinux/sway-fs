@@ -8,7 +8,6 @@ tray_files = have_tray ? [
 
 swaybar_deps = [
 	cairo,
-	client_protos,
 	gdk_pixbuf,
 	jsonc,
 	math,
@@ -27,12 +26,14 @@ executable(
 		'bar.c',
 		'config.c',
 		'i3bar.c',
+		'image.c',
 		'input.c',
 		'ipc.c',
 		'main.c',
 		'render.c',
 		'status_line.c',
-		tray_files
+		tray_files,
+		wl_protos_src,
 	],
 	include_directories: [sway_inc],
 	dependencies: swaybar_deps,

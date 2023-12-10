@@ -160,7 +160,7 @@ static void render_sharp_line(cairo_t *cairo, uint32_t color,
 
 static enum hotspot_event_handling block_hotspot_callback(
 		struct swaybar_output *output, struct swaybar_hotspot *hotspot,
-		double x, double y, uint32_t button, void *data) {
+		double x, double y, uint32_t button, bool released, void *data) {
 	struct i3bar_block *block = data;
 	struct status_line *status = output->bar->status;
 	return i3bar_block_send_click(status, block, x, y,
@@ -168,7 +168,7 @@ static enum hotspot_event_handling block_hotspot_callback(
 			y - (double)hotspot->y,
 			(double)hotspot->width,
 			(double)hotspot->height,
-			output->scale, button);
+			output->scale, button, released);
 }
 
 static void i3bar_block_unref_callback(void *data) {
@@ -292,7 +292,7 @@ static uint32_t render_status_block(struct render_context *ctx,
 	}
 
 	double offset = 0;
-	if (strncmp(block->align, "left", 5) == 0) {
+	if (strncmp(block->align, "left", 4) == 0) {
 		offset = x_pos;
 	} else if (strncmp(block->align, "right", 5) == 0) {
 		offset = x_pos + width - text_width;
@@ -599,9 +599,14 @@ static uint32_t render_binding_mode_indicator(struct render_context *ctx,
 
 static enum hotspot_event_handling workspace_hotspot_callback(
 		struct swaybar_output *output, struct swaybar_hotspot *hotspot,
-		double x, double y, uint32_t button, void *data) {
+		double x, double y, uint32_t button, bool released, void *data) {
 	if (button != BTN_LEFT) {
 		return HOTSPOT_PROCESS;
+	}
+	if (released) {
+		// Since we handle the pressed event, also handle the released event
+		// to block it from falling through to a binding in the bar
+		return HOTSPOT_IGNORE;
 	}
 	ipc_send_workspace_command(output->bar, (const char *)data);
 	return HOTSPOT_IGNORE;
@@ -688,15 +693,6 @@ static uint32_t render_to_cairo(struct render_context *ctx) {
 	struct swaybar_output *output = ctx->output;
 	struct swaybar *bar = output->bar;
 	struct swaybar_config *config = bar->config;
-	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
-	if (output->focused) {
-		ctx->background_color = config->colors.focused_background;
-	} else {
-		ctx->background_color = config->colors.background;
-	}
-
-	cairo_set_source_u32(cairo, ctx->background_color);
-	cairo_paint(cairo);
 
 	int th;
 	get_text_size(cairo, config->font_description, NULL, &th, NULL, 1, false, "");
@@ -758,8 +754,17 @@ void render_frame(struct swaybar_output *output) {
 
 	free_hotspots(&output->hotspots);
 
+	uint32_t background_color;
+	if (output->focused) {
+		background_color = output->bar->config->colors.focused_background;
+	} else {
+		background_color = output->bar->config->colors.background;
+	}
+
 	struct render_context ctx = { 0 };
 	ctx.output = output;
+	// initial background color used for deciding the best way to antialias text
+	ctx.background_color = background_color;
 
 	cairo_surface_t *recorder = cairo_recording_surface_create(
 			CAIRO_CONTENT_COLOR_ALPHA, NULL);
@@ -769,24 +774,23 @@ void render_frame(struct swaybar_output *output) {
 	ctx.cairo = cairo;
 
 	cairo_font_options_t *fo = cairo_font_options_create();
-	cairo_font_options_set_hint_style(fo, CAIRO_HINT_STYLE_FULL);
 	cairo_font_options_set_antialias(fo, CAIRO_ANTIALIAS_GRAY);
 	ctx.textaa_safe = fo;
 	if (output->subpixel == WL_OUTPUT_SUBPIXEL_NONE) {
 		ctx.textaa_sharp = ctx.textaa_safe;
 	} else {
 		fo = cairo_font_options_create();
-		cairo_font_options_set_hint_style(fo, CAIRO_HINT_STYLE_FULL);
 		cairo_font_options_set_antialias(fo, CAIRO_ANTIALIAS_SUBPIXEL);
 		cairo_font_options_set_subpixel_order(fo,
 			to_cairo_subpixel_order(output->subpixel));
 		ctx.textaa_sharp = fo;
 	}
 
-	cairo_save(cairo);
-	cairo_set_operator(cairo, CAIRO_OPERATOR_CLEAR);
+
+	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
+	cairo_set_source_u32(cairo, background_color);
 	cairo_paint(cairo);
-	cairo_restore(cairo);
+
 	uint32_t height = render_to_cairo(&ctx);
 	int config_height = output->bar->config->height;
 	if (config_height > 0) {
@@ -831,13 +835,15 @@ void render_frame(struct swaybar_output *output) {
 		wl_surface_damage(output->surface, 0, 0,
 				output->width, output->height);
 
-		uint32_t bg_alpha = ctx.background_color & 0xFF;
+		uint32_t bg_alpha = background_color & 0xFF;
 		if (bg_alpha == 0xFF) {
 			struct wl_region *region =
 				wl_compositor_create_region(output->bar->compositor);
 			wl_region_add(region, 0, 0, INT32_MAX, INT32_MAX);
 			wl_surface_set_opaque_region(output->surface, region);
 			wl_region_destroy(region);
+		} else {
+			wl_surface_set_opaque_region(output->surface, NULL);
 		}
 
 		struct wl_callback *frame_callback = wl_surface_frame(output->surface);

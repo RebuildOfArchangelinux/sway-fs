@@ -3,10 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#include <wlr/backend/libinput.h>
+#include <wlr/config.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_keyboard_group.h>
-#include <wlr/types/wlr_input_inhibitor.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
 #include "sway/config.h"
@@ -21,6 +20,10 @@
 #include "stringop.h"
 #include "list.h"
 #include "log.h"
+
+#if WLR_HAS_LIBINPUT_BACKEND
+#include <wlr/backend/libinput.h>
+#endif
 
 #define DEFAULT_SEAT "seat0"
 
@@ -76,20 +79,13 @@ char *input_device_get_identifier(struct wlr_input_device *device) {
 		}
 	}
 
-	const char *fmt = "%d:%d:%s";
-	int len = snprintf(NULL, 0, fmt, vendor, product, name) + 1;
-	char *identifier = malloc(len);
-	if (!identifier) {
-		sway_log(SWAY_ERROR, "Unable to allocate unique input device name");
-		return NULL;
-	}
-
-	snprintf(identifier, len, fmt, vendor, product, name);
+	char *identifier = format_str("%d:%d:%s", vendor, product, name);
 	free(name);
 	return identifier;
 }
 
 static bool device_is_touchpad(struct sway_input_device *device) {
+#if WLR_HAS_LIBINPUT_BACKEND
 	if (device->wlr_device->type != WLR_INPUT_DEVICE_POINTER ||
 			!wlr_input_device_is_libinput(device->wlr_device)) {
 		return false;
@@ -99,6 +95,9 @@ static bool device_is_touchpad(struct sway_input_device *device) {
 		wlr_libinput_get_device_handle(device->wlr_device);
 
 	return libinput_device_config_tap_get_finger_count(libinput_device) > 0;
+#else
+	return false;
+#endif
 }
 
 const char *input_device_get_type(struct sway_input_device *device) {
@@ -236,7 +235,11 @@ static void handle_new_input(struct wl_listener *listener, void *data) {
 
 	apply_input_type_config(input_device);
 
-	sway_input_configure_libinput_device(input_device);
+#if WLR_HAS_LIBINPUT_BACKEND
+	bool config_changed = sway_input_configure_libinput_device(input_device);
+#else
+	bool config_changed = false;
+#endif
 
 	wl_signal_add(&device->events.destroy, &input_device->device_destroy);
 	input_device->device_destroy.notify = handle_device_destroy;
@@ -274,33 +277,9 @@ static void handle_new_input(struct wl_listener *listener, void *data) {
 	}
 
 	ipc_event_input("added", input_device);
-}
 
-static void handle_inhibit_activate(struct wl_listener *listener, void *data) {
-	struct sway_input_manager *input_manager = wl_container_of(
-			listener, input_manager, inhibit_activate);
-	struct sway_seat *seat;
-	wl_list_for_each(seat, &input_manager->seats, link) {
-		seat_set_exclusive_client(seat, input_manager->inhibit->active_client);
-	}
-}
-
-static void handle_inhibit_deactivate(struct wl_listener *listener, void *data) {
-	struct sway_input_manager *input_manager = wl_container_of(
-			listener, input_manager, inhibit_deactivate);
-	struct sway_seat *seat;
-	if (server.session_lock.locked) {
-		// Don't deactivate the grab of a screenlocker
-		return;
-	}
-	wl_list_for_each(seat, &input_manager->seats, link) {
-		seat_set_exclusive_client(seat, NULL);
-		struct sway_node *previous = seat_get_focus(seat);
-		if (previous) {
-			// Hack to get seat to re-focus the return value of get_focus
-			seat_set_focus(seat, NULL);
-			seat_set_focus(seat, previous);
-		}
+	if (config_changed) {
+		ipc_event_input("libinput_config", input_device);
 	}
 }
 
@@ -472,20 +451,14 @@ struct sway_input_manager *input_manager_create(struct sway_server *server) {
 		&input->virtual_pointer_new);
 	input->virtual_pointer_new.notify = handle_virtual_pointer;
 
-	input->inhibit = wlr_input_inhibit_manager_create(server->wl_display);
-	input->inhibit_activate.notify = handle_inhibit_activate;
-	wl_signal_add(&input->inhibit->events.activate,
-			&input->inhibit_activate);
-	input->inhibit_deactivate.notify = handle_inhibit_deactivate;
-	wl_signal_add(&input->inhibit->events.deactivate,
-			&input->inhibit_deactivate);
-
 	input->keyboard_shortcuts_inhibit =
 		wlr_keyboard_shortcuts_inhibit_v1_create(server->wl_display);
 	input->keyboard_shortcuts_inhibit_new_inhibitor.notify =
 		handle_keyboard_shortcuts_inhibit_new_inhibitor;
 	wl_signal_add(&input->keyboard_shortcuts_inhibit->events.new_inhibitor,
 			&input->keyboard_shortcuts_inhibit_new_inhibitor);
+
+	input->pointer_gestures = wlr_pointer_gestures_v1_create(server->wl_display);
 
 	return input;
 }
@@ -524,21 +497,43 @@ static void retranslate_keysyms(struct input_config *input_config) {
 			return;
 		}
 	}
+
+	for (int i = 0; i < config->input_type_configs->length; ++i) {
+		struct input_config *ic = config->input_type_configs->items[i];
+		if (ic->xkb_layout || ic->xkb_file) {
+			// this is the first config with xkb_layout or xkb_file
+			if (ic->identifier == input_config->identifier) {
+				translate_keysyms(ic);
+			}
+
+			return;
+		}
+	}
 }
 
 static void input_manager_configure_input(
 		struct sway_input_device *input_device) {
-	sway_input_configure_libinput_device(input_device);
+#if WLR_HAS_LIBINPUT_BACKEND
+	bool config_changed = sway_input_configure_libinput_device(input_device);
+#else
+	bool config_changed = false;
+#endif
 	struct sway_seat *seat = NULL;
 	wl_list_for_each(seat, &server.input->seats, link) {
 		seat_configure_device(seat, input_device);
 	}
+	if (config_changed) {
+		ipc_event_input("libinput_config", input_device);
+	}
 }
 
-void input_manager_configure_all_inputs(void) {
-	struct sway_input_device *input_device = NULL;
+void input_manager_configure_all_input_mappings(void) {
+	struct sway_input_device *input_device;
 	wl_list_for_each(input_device, &server.input->devices, link) {
-		input_manager_configure_input(input_device);
+		struct sway_seat *seat;
+		wl_list_for_each(seat, &server.input->seats, link) {
+			seat_configure_device_mapping(seat, input_device);
+		}
 	}
 }
 
@@ -560,7 +555,9 @@ void input_manager_apply_input_config(struct input_config *input_config) {
 }
 
 void input_manager_reset_input(struct sway_input_device *input_device) {
+#if WLR_HAS_LIBINPUT_BACKEND
 	sway_input_reset_libinput_device(input_device);
+#endif
 	struct sway_seat *seat = NULL;
 	wl_list_for_each(seat, &server.input->seats, link) {
 		seat_reset_device(seat, input_device);
@@ -568,6 +565,13 @@ void input_manager_reset_input(struct sway_input_device *input_device) {
 }
 
 void input_manager_reset_all_inputs(void) {
+	// Set the active keyboard to NULL to avoid spamming configuration updates
+	// for all keyboard devices.
+	struct sway_seat *seat;
+	wl_list_for_each(seat, &server.input->seats, link) {
+		wlr_seat_set_keyboard(seat->wlr_seat, NULL);
+	}
+
 	struct sway_input_device *input_device = NULL;
 	wl_list_for_each(input_device, &server.input->devices, link) {
 		input_manager_reset_input(input_device);
@@ -576,7 +580,6 @@ void input_manager_reset_all_inputs(void) {
 	// If there is at least one keyboard using the default keymap, repeat delay,
 	// and repeat rate, then it is possible that there is a keyboard group that
 	// need their keyboard disarmed.
-	struct sway_seat *seat;
 	wl_list_for_each(seat, &server.input->seats, link) {
 		struct sway_keyboard_group *group;
 		wl_list_for_each(group, &seat->keyboard_groups, link) {
