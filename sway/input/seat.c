@@ -1092,20 +1092,19 @@ void seat_configure_xcursor(struct sway_seat *seat) {
 
 bool seat_is_input_allowed(struct sway_seat *seat,
 		struct wlr_surface *surface) {
-	if (server.session_lock.locked) {
-		if (server.session_lock.lock == NULL) {
-			return false;
-		}
-		struct wlr_session_lock_surface_v1 *lock_surf;
-		wl_list_for_each(lock_surf, &server.session_lock.lock->surfaces, link) {
-			if (lock_surf->surface == surface) {
-				return true;
-			}
-		}
+	if (!server.session_lock.locked) {
+		return true;
+	}
+	if (server.session_lock.lock == NULL) {
 		return false;
 	}
-	struct wl_client *client = wl_resource_get_client(surface->resource);
-	return seat->exclusive_client == client || seat->exclusive_client == NULL;
+	struct wlr_session_lock_surface_v1 *lock_surf;
+	wl_list_for_each(lock_surf, &server.session_lock.lock->surfaces, link) {
+		if (lock_surf->surface == surface) {
+			return true;
+		}
+	}
+	return false;
 }
 
 static void send_unfocus(struct sway_container *con, void *data) {
@@ -1370,18 +1369,7 @@ void seat_set_focus_layer(struct sway_seat *seat,
 	seat->focused_layer = layer;
 }
 
-void seat_set_exclusive_client(struct sway_seat *seat,
-		struct wl_client *client) {
-	if (!client) {
-		seat->exclusive_client = client;
-		// Triggers a refocus of the topmost surface layer if necessary
-		// TODO: Make layer surface focus per-output based on cursor position
-		for (int i = 0; i < root->outputs->length; ++i) {
-			struct sway_output *output = root->outputs->items[i];
-			arrange_layers(output);
-		}
-		return;
-	}
+void seat_unfocus_unless_client(struct sway_seat *seat, struct wl_client *client) {
 	if (seat->focused_layer) {
 		if (wl_resource_get_client(seat->focused_layer->resource) != client) {
 			seat_set_focus_layer(seat, NULL);
@@ -1408,7 +1396,6 @@ void seat_set_exclusive_client(struct sway_seat *seat,
 					now.tv_nsec / 1000, point->touch_id);
 		}
 	}
-	seat->exclusive_client = client;
 }
 
 struct sway_node *seat_get_focus_inactive(struct sway_seat *seat,

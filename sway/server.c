@@ -13,7 +13,6 @@
 #include <wlr/types/wlr_content_type_v1.h>
 #include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_data_control_v1.h>
-#include <wlr/types/wlr_drm.h>
 #include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_fractional_scale_wrath_v1.h>
@@ -38,6 +37,7 @@
 #include <wlr/types/wlr_xdg_foreign_v1.h>
 #include <wlr/types/wlr_xdg_foreign_v2.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
+#include <xf86drm.h>
 #include "config.h"
 #include "list.h"
 #include "log.h"
@@ -61,6 +61,8 @@
 #define SWAY_XDG_SHELL_VERSION 2
 #define SWAY_LAYER_SHELL_VERSION 4
 
+bool allow_unsupported_gpu = false;
+
 #if WLR_HAS_DRM_BACKEND
 static void handle_drm_lease_request(struct wl_listener *listener, void *data) {
 	/* We only offer non-desktop outputs, but in the future we might want to do
@@ -76,6 +78,17 @@ static void handle_drm_lease_request(struct wl_listener *listener, void *data) {
 #endif
 
 static bool is_privileged(const struct wl_global *global) {
+#if WLR_HAS_DRM_BACKEND
+	if (server.drm_lease_manager != NULL) {
+		struct wlr_drm_lease_device_v1 *drm_lease_dev;
+		wl_list_for_each(drm_lease_dev, &server.drm_lease_manager->devices, link) {
+			if (drm_lease_dev->global == global) {
+				return true;
+			}
+		}
+	}
+#endif
+
 	return
 		global == server.output_manager_v1->global ||
 		global == server.output_power_manager_v1->global ||
@@ -114,6 +127,42 @@ static bool filter_global(const struct wl_client *client,
 	return true;
 }
 
+static void detect_proprietary(struct wlr_backend *backend, void *data) {
+	int drm_fd = wlr_backend_get_drm_fd(backend);
+	if (drm_fd < 0) {
+		return;
+	}
+
+	drmVersion *version = drmGetVersion(drm_fd);
+	if (version == NULL) {
+		sway_log(SWAY_ERROR, "drmGetVersion() failed");
+		return;
+	}
+
+	bool is_unsupported = false;
+	if (strcmp(version->name, "nvidia-drm") == 0) {
+		is_unsupported = true;
+		sway_log(SWAY_ERROR, "!!! Proprietary Nvidia drivers are in use !!!");
+		if (!allow_unsupported_gpu) {
+			sway_log(SWAY_ERROR, "Use Nouveau instead");
+		}
+	}
+
+	if (strcmp(version->name, "evdi") == 0) {
+		is_unsupported = true;
+		sway_log(SWAY_ERROR, "!!! Proprietary DisplayLink drivers are in use !!!");
+	}
+
+	if (!allow_unsupported_gpu && is_unsupported) {
+		sway_log(SWAY_ERROR,
+			"Proprietary drivers are NOT supported. To launch sway anyway, "
+			"launch with --unsupported-gpu and DO NOT report issues.");
+		exit(EXIT_FAILURE);
+	}
+
+	drmFreeVersion(version);
+}
+
 bool server_init(struct sway_server *server) {
 	sway_log(SWAY_DEBUG, "Initializing Wayland server");
 	server->wl_display = wl_display_create();
@@ -129,6 +178,8 @@ bool server_init(struct sway_server *server) {
 		return false;
 	}
 
+	wlr_multi_for_each_backend(server->backend, detect_proprietary, NULL);
+
 	server->renderer = wlr_renderer_autocreate(server->backend);
 	if (!server->renderer) {
 		sway_log(SWAY_ERROR, "Failed to create renderer");
@@ -138,7 +189,6 @@ bool server_init(struct sway_server *server) {
 	wlr_renderer_init_wl_shm(server->renderer, server->wl_display);
 
 	if (wlr_renderer_get_dmabuf_texture_formats(server->renderer) != NULL) {
-		wlr_drm_create(server->wl_display, server->renderer);
 		server->linux_dmabuf_v1 = wlr_linux_dmabuf_v1_create_with_renderer(
 			server->wl_display, 4, server->renderer);
 	}
@@ -219,8 +269,7 @@ bool server_init(struct sway_server *server) {
 	wl_signal_add(&server->pointer_constraints->events.new_constraint,
 		&server->pointer_constraint);
 
-	server->presentation =
-		wlr_presentation_create(server->wl_display, server->backend);
+	wlr_presentation_create(server->wl_display, server->backend);
 
 	server->output_manager_v1 =
 		wlr_output_manager_v1_create(server->wl_display);
