@@ -1288,8 +1288,8 @@ bool container_is_fullscreen_or_child(struct sway_container *container) {
 
 static void surface_send_enter_iterator(struct wlr_surface *surface,
 		int x, int y, void *data) {
-	// wlr_fractional_scale_v1_notify_scale(surface, wlr_output->scale);
 	struct sway_output *output = data;
+	wlr_fractional_scale_v1_notify_scale(surface, output->wlr_output->scale);
 	surface_enter_output(surface, output);
 }
 

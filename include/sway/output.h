@@ -175,7 +175,7 @@ void output_get_box(struct sway_output *output, struct wlr_box *box);
 enum sway_container_layout output_get_default_layout(
 		struct sway_output *output);
 
-void render_rect(struct render_context *ctx, const struct wlr_box *_box,
+void render_rect(struct render_context *ctx, const struct wlr_fbox *_box,
 		float color[static 4]);
 
 void premultiply_alpha(float color[4], float opacity);

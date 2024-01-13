@@ -44,9 +44,7 @@ static void handle_render(struct sway_seat *seat, struct render_context *ctx) {
 		struct wlr_fbox box;
 		memcpy(&box, &e->drop_box, sizeof(struct wlr_fbox));
 		scale_fbox(&box, ctx->output->wlr_output->scale);
-		struct wlr_box t;
-		wlr_fbox_to_box_trunc(&t, &box);
-		render_rect(ctx, &t, color);
+		render_rect(ctx, &box, color);
 	}
 }
 

@@ -96,7 +96,7 @@ struct sway_view {
 
 	// The "old" geometry during a transaction. Used to damage the old location
 	// when a transaction is applied.
-	struct wlr_box saved_geometry;
+	struct wlr_fbox saved_geometry;
 
 	struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
 	struct wl_listener foreign_activate_request;

@@ -429,7 +429,7 @@ static void transaction_commit(struct sway_transaction *transaction) {
 			view_save_buffer(node->sway_container->view);
 			memcpy(&node->sway_container->view->saved_geometry,
 					&node->sway_container->view->geometry,
-					sizeof(struct wlr_box));
+					sizeof(struct wlr_fbox));
 		}
 		node->instruction = instruction;
 	}

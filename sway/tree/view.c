@@ -1157,7 +1157,7 @@ void view_child_init(struct sway_view_child *child,
 	if (container != NULL) {
 		struct sway_workspace *workspace = container->pending.workspace;
 		if (workspace) {
-			// wlr_fractional_scale_v1_notify_scale(child->surface, workspace->output->wlr_output->scale);
+			wlr_fractional_scale_v1_notify_scale(child->surface, workspace->output->wlr_output->scale);
 			surface_enter_output(child->surface, workspace->output);
 		}
 	}

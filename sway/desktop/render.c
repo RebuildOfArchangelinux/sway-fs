@@ -43,6 +43,7 @@ static void transform_output_damage(pixman_region32_t *damage, struct wlr_output
 	wlr_region_transform(damage, damage, transform, ow, oh);
 }
 
+/*
 static void transform_output_box(struct wlr_box *box, struct wlr_output *output) {
 	int ow, oh;
 	wlr_output_transformed_resolution(output, &ow, &oh);
@@ -50,6 +51,7 @@ static void transform_output_box(struct wlr_box *box, struct wlr_output *output)
 		wlr_output_transform_invert(output->transform);
 	wlr_box_transform(box, box, transform, ow, oh);
 }
+*/
 
 static void transform_output_fbox(struct wlr_fbox *box, struct wlr_output *output) {
 	int ow, oh;
@@ -58,7 +60,6 @@ static void transform_output_fbox(struct wlr_fbox *box, struct wlr_output *outpu
 		wlr_output_transform_invert(output->transform);
 	wlr_fbox_transform(box, box, transform, ow, oh);
 }
-
 
 /**
  * Apply scale to a width or height.
@@ -89,7 +90,7 @@ static enum wlr_scale_filter_mode get_scale_filter(struct sway_output *output) {
 
 static void render_texture(struct render_context *ctx, struct wlr_texture *texture,
 		const struct wlr_fbox *_src_box, const struct wlr_fbox *dst_box,
-		const struct wlr_fbox *clip_box, enum wl_output_transform transform, float alpha) {
+		const struct wlr_box *clip_box, enum wl_output_transform transform, float alpha) {
 	struct sway_output *output = ctx->output;
 
 	struct wlr_fbox proj_box = *dst_box;
@@ -100,8 +101,8 @@ static void render_texture(struct render_context *ctx, struct wlr_texture *textu
 	}
 
 	pixman_region32_t damage;
-	pixman_region32_init_rect(&damage, proj_box.x, proj_box.y,
-		proj_box.width, proj_box.height);
+	pixman_region32_init_rect(&damage, floor(proj_box.x), floor(proj_box.y),
+		ceil(proj_box.width), ceil(proj_box.height));
 	pixman_region32_intersect(&damage, &damage, ctx->output_damage);
 
 	if (clip_box) {
@@ -118,6 +119,13 @@ static void render_texture(struct render_context *ctx, struct wlr_texture *textu
 	transform_output_damage(&damage, output->wlr_output);
 	transform = wlr_output_transform_compose(transform, output->wlr_output->transform);
 
+	// printf("render_texture:\n");
+	// printf("src box %lf %lf %lf %lf, proj box %lf %lf %lf %lf\n", src_box.x,
+	// 				src_box.y, src_box.width, src_box.height, proj_box.x, proj_box.y,
+	// 				proj_box.width, proj_box.height);
+	// printf("clip box %d %d %d %d, texture %d,%d\n", clip_box->x, clip_box->y,
+	// 				clip_box->width, clip_box->height, texture->width,
+	// 				texture->height);
 	wlr_render_pass_add_texture(ctx->pass, &(struct wlr_render_texture_options) {
 		.texture = texture,
 		.src_box = src_box,
@@ -147,24 +155,36 @@ static void render_surface_iterator(struct sway_output *output,
 	struct wlr_fbox src_box;
 	wlr_surface_get_buffer_source_box(surface, &src_box);
 
-
-	// printf("box %lf %lf %lf %lf\n", _box->x, _box->y, _box->width, _box->height);
-	// printf("src box %lf %lf %lf %lf\n", src_box.x, src_box.y, src_box.width, src_box.height);
-	// printf("dst box %lf %lf %lf %lf\n", dst_box.x, dst_box.y, dst_box.width, dst_box.height);
-	// printf("proj box %lf %lf %lf %lf\n", proj_box.x, proj_box.y, proj_box.width, proj_box.height);
-	// if (clip_box != NULL)
-	// 	printf("clip box %d %d %d %d\n", clip_box->x, clip_box->y, clip_box->width, clip_box->height);
-	// printf("damage %d %d %d %d\n", output_damage->extents.x1, output_damage->extents.y1,
-	// 	output_damage->extents.x2, output_damage->extents.y2);
-	// printf("texture %d,%d\n", texture->width, texture->height);
 	struct wlr_fbox dst_box = *_box;
-	struct wlr_fbox clip_box = *_box;
+	struct wlr_fbox clip_fbox = *_box;
 	if (data->clip_box != NULL) {
-		clip_box.width = fmin(dst_box.width, data->clip_box->width);
-		clip_box.height = fmin(dst_box.height, data->clip_box->height);
+		clip_fbox.width = fmin(dst_box.width, data->clip_box->width);
+		clip_fbox.height = fmin(dst_box.height, data->clip_box->height);
 	}
 	scale_fbox(&dst_box, wlr_output->scale);
-	scale_fbox(&clip_box, wlr_output->scale);
+	dst_box.x = round(dst_box.x);
+	dst_box.y = round(dst_box.y);
+	dst_box.width = round(dst_box.width);
+	dst_box.height = round(dst_box.height);
+	scale_fbox(&clip_fbox, wlr_output->scale);
+
+	struct wlr_box clip_box = {
+		.x = floor(clip_fbox.x),
+		.y = floor(clip_fbox.y),
+		.width = ceil(clip_fbox.width),
+		.height = ceil(clip_fbox.height),
+	};
+
+	// printf("render_surface_iterator:\n");
+	// printf("box %lf %lf %lf %lf\n", _box->x, _box->y, _box->width, _box->height);
+	// printf("src box %lf %lf %lf %lf, dst box %lf %lf %lf %lf\n", src_box.x,
+	// 				src_box.y, src_box.width, src_box.height, dst_box.x, dst_box.y,
+	// 				dst_box.width, dst_box.height);
+	// printf("clip box %d %d %d %d, texture %d,%d\n", clip_box.x, clip_box.y,
+	// 				clip_box.width, clip_box.height, texture->width,
+	// 				texture->height);
+	// printf("damage %d %d %d %d\n", output_damage->extents.x1, output_damage->extents.y1,
+	// 	output_damage->extents.x2, output_damage->extents.y2);
 
 	render_texture(data->ctx, texture,
 		&src_box, &dst_box, &clip_box, surface->current.transform, alpha);
@@ -213,17 +233,17 @@ static void render_drag_icons(struct render_context *ctx, struct wl_list *drag_i
 
 // _box.x and .y are expected to be layout-local
 // _box.width and .height are expected to be output-buffer-local
-void render_rect(struct render_context *ctx, const struct wlr_box *_box,
+void render_rect(struct render_context *ctx, const struct wlr_fbox *_box,
 		float color[static 4]) {
 	struct wlr_output *wlr_output = ctx->output->wlr_output;
 
-	struct wlr_box box = *_box;
+	struct wlr_fbox box = *_box;
 	box.x -= ctx->output->lx * wlr_output->scale;
 	box.y -= ctx->output->ly * wlr_output->scale;
 
 	pixman_region32_t damage;
-	pixman_region32_init_rect(&damage, box.x, box.y,
-		box.width, box.height);
+	pixman_region32_init_rect(&damage, floor(box.x), floor(box.y),
+		ceil(box.width), ceil(box.height));
 	pixman_region32_intersect(&damage, &damage, ctx->output_damage);
 	bool damaged = pixman_region32_not_empty(&damage);
 	if (!damaged) {
@@ -231,7 +251,7 @@ void render_rect(struct render_context *ctx, const struct wlr_box *_box,
 	}
 
 	transform_output_damage(&damage, wlr_output);
-	transform_output_box(&box, wlr_output);
+	transform_output_fbox(&box, wlr_output);
 
 	wlr_render_pass_add_rect(ctx->pass, &(struct wlr_render_rect_options){
 		.box = box,
@@ -325,20 +345,26 @@ static void render_saved_view(struct render_context *ctx, struct sway_view *view
 		}
 
 		struct wlr_fbox dst_box = proj_box;
-		struct wlr_fbox clip_box = proj_box;
+		struct wlr_fbox clip_fbox = proj_box;
 		// scale_fbox(&proj_box, wlr_output->scale);
 
 		if (!floating) {
-			clip_box.width = fmin(dst_box.width,
+			clip_fbox.width = fmin(dst_box.width,
 					view->container->current.content_width -
 					(saved_buf->x - view->container->current.content_x) + view->saved_geometry.x);
-			clip_box.height = fmin(dst_box.height,
+			clip_fbox.height = fmin(dst_box.height,
 					view->container->current.content_height -
 					(saved_buf->y - view->container->current.content_y) + view->saved_geometry.y);
 		}
 		scale_fbox(&dst_box, wlr_output->scale);
-		scale_fbox(&clip_box, wlr_output->scale);
+		scale_fbox(&clip_fbox, wlr_output->scale);
 
+		struct wlr_box clip_box = {
+			.x = floor(clip_fbox.x),
+			.y = floor(clip_fbox.y),
+			.width = ceil(clip_fbox.width),
+			.height = ceil(clip_fbox.height),
+		};
 		render_texture(ctx, saved_buf->buffer->texture,
 			&saved_buf->source_box, &dst_box, &clip_box, saved_buf->transform, alpha);
 	}
@@ -364,7 +390,7 @@ static void render_view(struct render_context *ctx,
 		return;
 	}
 
-	struct wlr_box box;
+	struct wlr_fbox box;
 	float output_scale = ctx->output->wlr_output->scale;
 	float color[4];
 	struct sway_container_state *state = &con->current;
@@ -372,11 +398,11 @@ static void render_view(struct render_context *ctx,
 	if (state->border_left) {
 		memcpy(&color, colors->child_border, sizeof(float) * 4);
 		premultiply_alpha(color, con->alpha);
-		box.x = floor(state->x);
-		box.y = floor(state->content_y);
+		box.x = state->x;
+		box.y = state->content_y;
 		box.width = state->border_thickness;
 		box.height = state->content_height;
-		scale_box(&box, output_scale);
+		scale_fbox(&box, output_scale);
 		render_rect(ctx, &box, color);
 	}
 
@@ -391,11 +417,11 @@ static void render_view(struct render_context *ctx,
 			memcpy(&color, colors->child_border, sizeof(float) * 4);
 		}
 		premultiply_alpha(color, con->alpha);
-		box.x = floor(state->content_x + state->content_width);
-		box.y = floor(state->content_y);
+		box.x = state->content_x + state->content_width;
+		box.y = state->content_y;
 		box.width = state->border_thickness;
 		box.height = state->content_height;
-		scale_box(&box, output_scale);
+		scale_fbox(&box, output_scale);
 		render_rect(ctx, &box, color);
 	}
 
@@ -406,11 +432,11 @@ static void render_view(struct render_context *ctx,
 			memcpy(&color, colors->child_border, sizeof(float) * 4);
 		}
 		premultiply_alpha(color, con->alpha);
-		box.x = floor(state->x);
-		box.y = floor(state->content_y + state->content_height);
+		box.x = state->x;
+		box.y = state->content_y + state->content_height;
 		box.width = state->width;
 		box.height = state->border_thickness;
-		scale_box(&box, output_scale);
+		scale_fbox(&box, output_scale);
 		render_rect(ctx, &box, color);
 	}
 }
@@ -428,7 +454,7 @@ static void render_titlebar(struct render_context *ctx, struct sway_container *c
 		int x, int y, int width,
 		struct border_colors *colors, struct wlr_texture *title_texture,
 		struct wlr_texture *marks_texture) {
-	struct wlr_box box;
+	struct wlr_fbox box;
 	float color[4];
 	struct sway_output *output = ctx->output;
 	float output_scale = output->wlr_output->scale;
@@ -446,7 +472,7 @@ static void render_titlebar(struct render_context *ctx, struct sway_container *c
 	box.y = y;
 	box.width = width;
 	box.height = titlebar_border_thickness;
-	scale_box(&box, output_scale);
+	scale_fbox(&box, output_scale);
 	render_rect(ctx, &box, color);
 
 	// Single pixel bar below title
@@ -454,7 +480,7 @@ static void render_titlebar(struct render_context *ctx, struct sway_container *c
 	box.y = y + container_titlebar_height() - titlebar_border_thickness;
 	box.width = width;
 	box.height = titlebar_border_thickness;
-	scale_box(&box, output_scale);
+	scale_fbox(&box, output_scale);
 	render_rect(ctx, &box, color);
 
 	// Single pixel left edge
@@ -462,7 +488,7 @@ static void render_titlebar(struct render_context *ctx, struct sway_container *c
 	box.y = y + titlebar_border_thickness;
 	box.width = titlebar_border_thickness;
 	box.height = container_titlebar_height() - titlebar_border_thickness * 2;
-	scale_box(&box, output_scale);
+	scale_fbox(&box, output_scale);
 	render_rect(ctx, &box, color);
 
 	// Single pixel right edge
@@ -470,7 +496,7 @@ static void render_titlebar(struct render_context *ctx, struct sway_container *c
 	box.y = y + titlebar_border_thickness;
 	box.width = titlebar_border_thickness;
 	box.height = container_titlebar_height() - titlebar_border_thickness * 2;
-	scale_box(&box, output_scale);
+	scale_fbox(&box, output_scale);
 	render_rect(ctx, &box, color);
 
 	int inner_x = x - output_x + titlebar_h_padding;
@@ -512,10 +538,16 @@ static void render_titlebar(struct render_context *ctx, struct sway_container *c
 		texture_box.y = round((bg_y - output_y) * output_scale) +
 			ob_padding_above;
 
-		struct wlr_fbox clip_box = texture_box;
-		if (ob_inner_width < clip_box.width) {
-			clip_box.width = ob_inner_width;
+		struct wlr_fbox clip_fbox = texture_box;
+		if (ob_inner_width < clip_fbox.width) {
+			clip_fbox.width = ob_inner_width;
 		}
+		struct wlr_box clip_box = {
+			.x = floor(clip_fbox.x),
+			.y = floor(clip_fbox.y),
+			.width = ceil(clip_fbox.width),
+			.height = ceil(clip_fbox.height),
+		};
 		render_texture(ctx, marks_texture,
 			NULL, &texture_box, &clip_box, WL_OUTPUT_TRANSFORM_NORMAL, con->alpha);
 
@@ -583,10 +615,16 @@ static void render_titlebar(struct render_context *ctx, struct sway_container *c
 		texture_box.y =
 			round((bg_y - output_y) * output_scale) + ob_padding_above;
 
-		struct wlr_fbox clip_box = texture_box;
-		if (ob_inner_width - ob_marks_width < clip_box.width) {
-			clip_box.width = ob_inner_width - ob_marks_width;
+		struct wlr_fbox clip_fbox = texture_box;
+		if (ob_inner_width - ob_marks_width < clip_fbox.width) {
+			clip_fbox.width = ob_inner_width - ob_marks_width;
 		}
+		struct wlr_box clip_box = {
+			.x = floor(clip_fbox.x),
+			.y = floor(clip_fbox.y),
+			.width = ceil(clip_fbox.width),
+			.height = ceil(clip_fbox.height),
+		};
 
 		render_texture(ctx, title_texture,
 			NULL, &texture_box, &clip_box, WL_OUTPUT_TRANSFORM_NORMAL, con->alpha);
@@ -646,7 +684,7 @@ static void render_titlebar(struct render_context *ctx, struct sway_container *c
 	box.width = titlebar_h_padding - titlebar_border_thickness;
 	box.height = (titlebar_v_padding - titlebar_border_thickness) * 2 +
 		config->font_height;
-	scale_box(&box, output_scale);
+	scale_fbox(&box, output_scale);
 	int left_x = ob_left_x + round(output_x * output_scale);
 	if (box.x + box.width < left_x) {
 		box.width += left_x - box.x - box.width;
@@ -659,7 +697,7 @@ static void render_titlebar(struct render_context *ctx, struct sway_container *c
 	box.width = titlebar_h_padding - titlebar_border_thickness;
 	box.height = (titlebar_v_padding - titlebar_border_thickness) * 2 +
 		config->font_height;
-	scale_box(&box, output_scale);
+	scale_fbox(&box, output_scale);
 	int right_rx = ob_right_x + ob_right_width + round(output_x * output_scale);
 	if (right_rx < box.x) {
 		box.width += box.x - right_rx;
@@ -677,18 +715,18 @@ static void render_top_border(struct render_context *ctx, struct sway_container 
 	if (!state->border_top) {
 		return;
 	}
-	struct wlr_box box;
+	struct wlr_fbox box;
 	float color[4];
 	float output_scale = ctx->output->wlr_output->scale;
 
 	// Child border - top edge
 	memcpy(&color, colors->child_border, sizeof(float) * 4);
 	premultiply_alpha(color, con->alpha);
-	box.x = floor(state->x);
-	box.y = floor(state->y);
+	box.x = state->x;
+	box.y = state->y;
 	box.width = state->width;
 	box.height = state->border_thickness;
-	scale_box(&box, output_scale);
+	scale_fbox(&box, output_scale);
 	render_rect(ctx, &box, color);
 }
 
