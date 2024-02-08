@@ -48,7 +48,7 @@ void handle_compositor_new_surface(struct wl_listener *listener, void *data) {
 }
 
 void surface_update_outputs(struct wlr_surface *surface) {
-	float scale = 1;
+	float scale = 0.1;
 	struct wlr_surface_output *surface_output;
 	wl_list_for_each(surface_output, &surface->current_outputs, link) {
 		if (surface_output->output->scale > scale) {
